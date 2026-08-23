@@ -1,0 +1,9 @@
+.Rproj.user
+.Rhistory
+.RData
+.RDataTmp
+.RDataTmp1
+.Ruserdata
+.positai
+data/           
+*.rds
