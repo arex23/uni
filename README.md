@@ -1,4 +1,4 @@
-# Tirocinio — Shannon Entropy & Stemness in Meningioma Spatial Transcriptomics
+# Shannon Entropy & Stemness in Meningioma Spatial Transcriptomics
 
 ## Overview
 This project investigates whether Shannon entropy, computed over spatial
