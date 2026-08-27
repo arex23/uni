@@ -36,7 +36,7 @@ Tirocinio/
 
 ## Pipeline order
 
-1. `analyze_entropy.R` — uses `shannon_entropy.R` and `entropy_correlation.R` to calculate entropy on SpaNorm normalized data and tests the results
+1. `analyze_entropy.R` — creates a Seurat object with the sample data; normalizes it with SpaNorm, calculates per-spot entropy using `shannon_entropy.R`; uses `entropy_correlation` to test whether there's still correlation between entropy and sequencing depth (there was high correlation pre-normalization, I should make a separate script to show that)
 2. `analyze_stemness.R` — uses `AddModuleScore()` to map where entropy markers are and if they match high entropy regions
 
 ## Environment setup
