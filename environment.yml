@@ -248,8 +248,7 @@ dependencies:
   - xorg-libxdmcp=1.1.5=hb03c661_1
   - xorg-libxext=1.3.7=hb03c661_0
   - xorg-libxrender=0.9.12=hb9d3cd8_0
-  - xorg-libxt=1.3.1=hb9d3cd8_0
   - zstd=1.5.7=hb78ec9c_6
-  - bioconductor-spanorm
-  - bioconductor-spatialexperiment 
-prefix: /home/alexej/miniforge3/envs/thesis
+  - bioconductor-spanorm=1.4.0=r45hdfd78af_0
+  - bioconductor-spatialexperiment=1.20.0=r45hdfd78af_0
+prefix: /home/alexej/miniforge3/envs/stemness

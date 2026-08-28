@@ -24,7 +24,7 @@ Use the conda environment defined in `environment.yml`. Don't add,
 remove, or upgrade packages without logging it in `docs/DECISIONS.md`.
 
 ## Pipeline order
-`analyze_entropy.R` (calls `entropy_correlation.R` and `shannon_entropy.R`) → `analyze_stemness.R` →
+`analyze_entropy.R` (calls `R/entropy_correlation.R` and `R/shannon_entropy.R`) → `analyze_stemness.R` →
 `find_entropy_markers.R`
 
 ## Data handling
