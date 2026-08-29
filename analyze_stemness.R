@@ -10,7 +10,9 @@ source("R/entropy_correlation.R")
 stemness_genes <- list(c("PROM1", "SOX2", "POU5F1", "NANOG", "NES", "CD44", "MYC"))
 
 samples <- list.dirs("data", full.names = FALSE, recursive = FALSE)
-samples <- samples[samples != ""]
+samples <- samples[grepl("sample[0-9]+$", samples)]
+sample_nums <- as.numeric(gsub(".*sample", "", samples))
+samples <- samples[order(sample_nums)]
 
 analyze_stemness_sample <- function(sample_name) {
   cat("==========================================\n")
@@ -36,10 +38,20 @@ analyze_stemness_sample <- function(sample_name) {
     pct_spots <- round(100 * Matrix::rowSums(sub_counts > 0) / ncol(counts), 2)
     mean_counts <- round(Matrix::rowMeans(sub_counts), 3)
     for (g in genes_in_data) {
+      pct_val <- pct_spots[[g]]
+      det_level <- if (pct_val >= 5.0) {
+        "robust (>=5%)"
+      } else if (pct_val >= 1.0) {
+        "low (1-5%)"
+      } else {
+        "rare (<1%)"
+      }
+
       detection_rows[[g]] <- data.frame(
         gene = g,
-        pct_spots = pct_spots[[g]],
+        pct_spots = pct_val,
         mean_count = mean_counts[[g]],
+        detection_level = det_level,
         status = "detected",
         stringsAsFactors = FALSE
       )
@@ -50,6 +62,7 @@ analyze_stemness_sample <- function(sample_name) {
       gene = g,
       pct_spots = 0,
       mean_count = 0,
+      detection_level = "absent (0%)",
       status = "missing/filtered",
       stringsAsFactors = FALSE
     )
@@ -82,14 +95,13 @@ analyze_stemness_sample <- function(sample_name) {
     return(invisible(NULL))
   }
 
-  # Note if low-abundance markers (POU5F1, NANOG, PROM1) are poorly detected
-  low_abund <- intersect(c("POU5F1", "NANOG", "PROM1"), panel)
-  low_detected <- low_abund[low_abund %in% genes_in_data]
-  if (length(low_detected) > 0) {
-    low_pcts <- detection_df[low_detected, "pct_spots"]
-    if (all(low_pcts < 2.0)) {
-      cat("Note: Low-abundance pluripotency markers (POU5F1/NANOG/PROM1) detected in <2% of spots. Module score is predominantly driven by robust markers (CD44/NES/MYC).\n")
-    }
+  # Report individual marker detection rates
+  for (g in genes_in_data) {
+    cat(sprintf("  - %s: %s of spots (mean count: %s, %s)\n",
+                g,
+                paste0(detection_df[g, "pct_spots"], "%"),
+                detection_df[g, "mean_count"],
+                detection_df[g, "detection_level"]))
   }
 
   # Calculate stemness module score (deterministic with set.seed(23))

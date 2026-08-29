@@ -60,16 +60,18 @@ setMethod("SpaNorm", signature(spe = "Seurat"), function(spe,
 })
 
 samples <- list.dirs("data", full.names = FALSE, recursive = FALSE)
-samples <- samples[samples != ""]
+samples <- samples[grepl("sample[0-9]+$", samples)]
+sample_nums <- as.numeric(gsub(".*sample", "", samples))
+samples <- samples[order(sample_nums)]
 
-align_spots_to_coords <- function(seurat_obj) {
+validate_imaged_coordinates <- function(seurat_obj) {
   counts_mat <- Seurat::GetAssayData(seurat_obj, assay = "Spatial", layer = "counts")
   coords_df <- Seurat::GetTissueCoordinates(seurat_obj)
   coords_mat <- as.matrix(coords_df[, 1:2])
 
   common_spots <- intersect(colnames(counts_mat), rownames(coords_mat))
   if (length(common_spots) > 0 && length(common_spots) < ncol(seurat_obj)) {
-    cat(sprintf("Aligning spots: subsetting from %d to %d spots with valid coordinates.\n",
+    cat(sprintf("Subsetting from %d to %d spots with valid imaged coordinates.\n",
                 ncol(seurat_obj), length(common_spots)))
     seurat_obj <- subset(seurat_obj, cells = common_spots)
   }
@@ -80,42 +82,60 @@ analyze_sample <- function(sample_name) {
   cat("==========================================\n")
   cat("Processing sample:", sample_name, "\n")
 
-  data_dir <- file.path("data", sample_name, "raw_data")
-  if (!dir.exists(data_dir)) {
-    stop(sprintf("Directory '%s' does not exist for sample '%s'", data_dir, sample_name))
+  sample_dir <- file.path("data", sample_name)
+  if (!dir.exists(sample_dir)) {
+    stop(sprintf("Directory '%s' does not exist for sample '%s'", sample_dir, sample_name))
   }
 
-  h5_files <- list.files(path = data_dir, pattern = "\\.h5$", full.names = FALSE)
-  if (length(h5_files) != 1) {
-    stop(sprintf("Expected exactly 1 .h5 file in %s for sample '%s', found %d: %s",
-                 data_dir, sample_name, length(h5_files), paste(h5_files, collapse = ", ")))
+  h5_files <- list.files(path = sample_dir, pattern = "\\.h5$", recursive = TRUE, full.names = TRUE)
+  if (length(h5_files) == 0) {
+    stop(sprintf("No .h5 file found in %s for sample '%s'", sample_dir, sample_name))
   }
-  h5_file <- h5_files[1]
+  h5_path <- h5_files[1]
+
+  tp_files <- list.files(path = sample_dir, pattern = "tissue_positions.*\\.csv$", recursive = TRUE, full.names = TRUE)
+  if (length(tp_files) == 0) {
+    stop(sprintf("No tissue_positions.csv found in %s for sample '%s'", sample_dir, sample_name))
+  }
+  tp_file <- tp_files[1]
+
+  spatial_dir <- dirname(dirname(tp_file))
+  h5_rel <- if (dirname(h5_path) == spatial_dir) basename(h5_path) else file.path("..", basename(h5_path))
 
   spatial_obj <- Load10X_Spatial(
-    data.dir = data_dir,
-    filename = h5_file,
+    data.dir = spatial_dir,
+    filename = h5_rel,
     assay = "Spatial",
     filter.matrix = TRUE
   )
 
-  # Calculate mitochondrial and ribosomal percentages
+  raw_spots_grid <- ncol(spatial_obj)
+  n_raw_genes <- nrow(spatial_obj)
+
+  # Load tissue positions and explicitly subset to in_tissue == 1 spots
+  tp_df <- read.csv(tp_file)
+  ontissue_barcodes <- if ("in_tissue" %in% colnames(tp_df)) {
+    tp_df$barcode[tp_df$in_tissue == 1]
+  } else {
+    tp_df[[1]][tp_df[[2]] == 1]
+  }
+
+  spatial_obj <- subset(spatial_obj, cells = intersect(colnames(spatial_obj), ontissue_barcodes))
+  n_spots_ontissue <- ncol(spatial_obj)
+
+  # Calculate mitochondrial and ribosomal percentages on-tissue
   spatial_obj[["percent.mt"]] <- PercentageFeatureSet(spatial_obj, pattern = "^MT-")
   spatial_obj[["percent.ribo"]] <- PercentageFeatureSet(spatial_obj, pattern = "^RP[SL]")
 
-  n_raw_spots <- ncol(spatial_obj)
-  n_raw_genes <- nrow(spatial_obj)
-
-  # 1. Spot filtering by sequencing depth and feature count
+  # 1. Spot filtering by sequencing depth and feature count on on-tissue spots
   valid_spots <- colnames(spatial_obj)[spatial_obj$nCount_Spatial >= 500 & spatial_obj$nFeature_Spatial >= 250]
   spatial_obj <- subset(spatial_obj, cells = valid_spots)
-  n_spots_post_qc <- ncol(spatial_obj)
+  n_spots_post_depth_qc <- ncol(spatial_obj)
 
-  # 2. Align spots with available tissue coordinates
-  spatial_obj <- align_spots_to_coords(spatial_obj)
-  n_spots_post_align <- ncol(spatial_obj)
+  # 2. Validate/align spots with imaged tissue coordinates
+  spatial_obj <- validate_imaged_coordinates(spatial_obj)
 
-  # 3. Gene filtering computed AFTER subsetting to valid spots
+  # 3. Gene filtering computed AFTER subsetting to valid on-tissue spots
   raw_counts <- Seurat::GetAssayData(spatial_obj, assay = "Spatial", layer = "counts")
   min_spots_per_gene <- max(20, ceiling(0.02 * ncol(spatial_obj)))
   expressed_genes <- rownames(raw_counts)[Matrix::rowSums(raw_counts > 0) >= min_spots_per_gene]
@@ -162,15 +182,15 @@ analyze_sample <- function(sample_name) {
   if (!dir.exists(stat_dir)) dir.create(stat_dir, recursive = TRUE)
   if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
 
-  # Save per-sample QC filtering log table
+  # Save per-sample QC filtering log table with honest on-tissue accounting
   qc_df <- data.frame(
     Sample = sample_name,
-    Raw_Spots = n_raw_spots,
+    Raw_Spots_Grid = raw_spots_grid,
+    Spots_On_Tissue = n_spots_ontissue,
+    Spots_Post_Depth_QC = n_spots_post_depth_qc,
+    Pct_OnTissue_Retained = round((n_spots_post_depth_qc / n_spots_ontissue) * 100, 2),
     Raw_Genes = n_raw_genes,
-    Spots_Post_QC = n_spots_post_qc,
-    Spots_Post_Coord_Align = n_spots_post_align,
     Genes_Post_Filter = n_genes_post_filter,
-    Pct_Spots_Retained = round((n_spots_post_align / n_raw_spots) * 100, 2),
     Pct_Genes_Retained = round((n_genes_post_filter / n_raw_genes) * 100, 2),
     Mean_Percent_MT = round(mean(spatial_obj$percent.mt, na.rm = TRUE), 2),
     Mean_Percent_Ribo = round(mean(spatial_obj$percent.ribo, na.rm = TRUE), 2),

@@ -56,8 +56,9 @@ calculate_entropy_correlations <- function(seurat_obj,
       valid <- !is.na(x) & !is.na(y) & is.finite(x) & is.finite(y)
       x_clean <- x[valid]
       y_clean <- y[valid]
+      N <- length(x_clean)
 
-      if (length(x_clean) < 3) {
+      if (N < 3) {
         warning(sprintf("Not enough valid data points for '%s' vs '%s'. Skipping.", e_col, t_name))
         next
       }
@@ -69,21 +70,58 @@ calculate_entropy_correlations <- function(seurat_obj,
         s_test <- suppressWarnings(cor.test(x_clean, y_clean, method = "spearman", exact = FALSE))
 
         p_r <- if (!is.null(p_test$estimate) && !is.na(p_test$estimate)) unname(p_test$estimate) else NA_real_
-        p_pval <- if (!is.null(p_test$p.value) && !is.na(p_test$p.value)) p_test$p.value else NA_real_
+        p_pval <- if (!is.null(p_test$p.value) && !is.na(p_test$p.value)) unname(p_test$p.value) else NA_real_
+
+        # Pearson log10 p-value via log-t distribution to avoid zero-saturation
+        t_stat <- if (!is.null(p_test$statistic) && !is.na(p_test$statistic)) unname(p_test$statistic) else NA_real_
+        df_val <- if (!is.null(p_test$parameter) && !is.na(p_test$parameter)) unname(p_test$parameter) else NA_real_
+        p_log10_pval <- if (!is.na(t_stat) && !is.na(df_val) && df_val > 0) {
+          (log(2) + pt(-abs(t_stat), df = df_val, log.p = TRUE)) / log(10)
+        } else {
+          NA_real_
+        }
+
+        # Pearson 95% Confidence Interval
+        p_ci_low <- if (!is.null(p_test$conf.int)) unname(p_test$conf.int[1]) else NA_real_
+        p_ci_high <- if (!is.null(p_test$conf.int)) unname(p_test$conf.int[2]) else NA_real_
+
         s_rho <- if (!is.null(s_test$estimate) && !is.na(s_test$estimate)) unname(s_test$estimate) else NA_real_
-        s_pval <- if (!is.null(s_test$p.value) && !is.na(s_test$p.value)) s_test$p.value else NA_real_
+        s_pval <- if (!is.null(s_test$p.value) && !is.na(s_test$p.value)) unname(s_test$p.value) else NA_real_
+
+        # Spearman 95% Confidence Interval via Fisher-z transformation
+        if (!is.na(s_rho) && N > 3 && abs(s_rho) < 1) {
+          z_val <- atanh(s_rho)
+          se_z <- 1 / sqrt(N - 3)
+          crit_z <- qnorm(0.975)
+          s_ci_low <- tanh(z_val - crit_z * se_z)
+          s_ci_high <- tanh(z_val + crit_z * se_z)
+        } else if (!is.na(s_rho) && abs(s_rho) >= 1) {
+          s_ci_low <- s_rho
+          s_ci_high <- s_rho
+        } else {
+          s_ci_low <- NA_real_
+          s_ci_high <- NA_real_
+        }
       } else {
         p_r <- NA_real_
         p_pval <- NA_real_
+        p_log10_pval <- NA_real_
+        p_ci_low <- NA_real_
+        p_ci_high <- NA_real_
         s_rho <- NA_real_
         s_pval <- NA_real_
+        s_ci_low <- NA_real_
+        s_ci_high <- NA_real_
       }
 
-      p_r_str <- if (is.na(p_r) || is.nan(p_r)) "NA" else sprintf("%.4f", round(p_r, 4))
-      s_rho_str <- if (is.na(s_rho) || is.nan(s_rho)) "NA" else sprintf("%.4f", round(s_rho, 4))
+      # Format display strings for plot annotations ONLY
+      p_r_str <- if (is.na(p_r) || is.nan(p_r)) "NA" else sprintf("%.4f", p_r)
+      s_rho_str <- if (is.na(s_rho) || is.nan(s_rho)) "NA" else sprintf("%.4f", s_rho)
 
       p_str <- if (is.na(p_pval) || is.nan(p_pval)) {
         "NA"
+      } else if (!is.na(p_log10_pval) && p_log10_pval < -300) {
+        sprintf("10^%.1f", p_log10_pval)
       } else if (p_pval < 0.0001) {
         sprintf("%.2e", p_pval)
       } else {
@@ -102,17 +140,23 @@ calculate_entropy_correlations <- function(seurat_obj,
         Sample = sample_prefix,
         Entropy_Metric = e_label,
         Target_Variable = t_name,
-        Pearson_r = if (is.na(p_r) || is.nan(p_r)) NA_real_ else round(p_r, 4),
-        Pearson_p = p_str,
-        Spearman_rho = if (is.na(s_rho) || is.nan(s_rho)) NA_real_ else round(s_rho, 4),
-        Spearman_p = s_str,
+        N = N,
+        Pearson_r = p_r,
+        Pearson_p = p_pval,
+        Pearson_log10_p = p_log10_pval,
+        Pearson_CI_low = p_ci_low,
+        Pearson_CI_high = p_ci_high,
+        Spearman_rho = s_rho,
+        Spearman_p = s_pval,
+        Spearman_CI_low = s_ci_low,
+        Spearman_CI_high = s_ci_high,
         stringsAsFactors = FALSE
       )
 
       anno_text <- if (has_variance) {
-        sprintf("Pearson r: %s (p = %s)\nSpearman \u03c1: %s (p = %s)", p_r_str, p_str, s_rho_str, s_str)
+        sprintf("N: %d\nPearson r: %s (p = %s)\nSpearman \u03c1: %s (p = %s)", N, p_r_str, p_str, s_rho_str, s_str)
       } else {
-        sprintf("Pearson r: NA\nSpearman \u03c1: NA\n(Zero variance in %s)", if (sd(x_clean) == 0) t_name else e_label)
+        sprintf("N: %d\nPearson r: NA\nSpearman \u03c1: NA\n(Zero variance in %s)", N, if (sd(x_clean) == 0) t_name else e_label)
       }
 
       p_scatter <- ggplot(meta, aes(x = .data[[t_col]], y = .data[[e_col]])) +
