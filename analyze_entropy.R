@@ -132,17 +132,25 @@ analyze_sample <- function(sample_name) {
   spatial_obj <- subset(spatial_obj, cells = valid_spots)
   n_spots_post_depth_qc <- ncol(spatial_obj)
 
-  # 2. Validate/align spots with imaged tissue coordinates
+  # 2. Validate/align spots with imaged tissue coordinates.
+  # After the explicit in_tissue subset above this should be a no-op; it is kept
+  # as a safety net and its result is recorded so the QC table cannot drift.
   spatial_obj <- validate_imaged_coordinates(spatial_obj)
+  n_spots_final <- ncol(spatial_obj)
 
   # 3. Gene filtering computed AFTER subsetting to valid on-tissue spots
   raw_counts <- Seurat::GetAssayData(spatial_obj, assay = "Spatial", layer = "counts")
   min_spots_per_gene <- max(20, ceiling(0.02 * ncol(spatial_obj)))
-  expressed_genes <- rownames(raw_counts)[Matrix::rowSums(raw_counts > 0) >= min_spots_per_gene]
+  gene_totals <- Matrix::rowSums(raw_counts > 0)
+  # Genes with at least one count in at least one retained spot. The probe panel
+  # emits the full GRCh38 feature list, so ~18,100 of the 37,082 rows are
+  # structurally zero (no probe targets them) and are not real gene loss.
+  n_genes_detected <- sum(gene_totals > 0)
+  expressed_genes <- rownames(raw_counts)[gene_totals >= min_spots_per_gene]
 
   spatial_obj <- subset(spatial_obj, features = expressed_genes)
   n_genes_post_filter <- nrow(spatial_obj)
-  rm(raw_counts, valid_spots, expressed_genes)
+  rm(raw_counts, valid_spots, expressed_genes, gene_totals)
   gc()
 
   # 4. Calculate raw Shannon entropy (excluding MT and ribosomal genes)
@@ -188,10 +196,13 @@ analyze_sample <- function(sample_name) {
     Raw_Spots_Grid = raw_spots_grid,
     Spots_On_Tissue = n_spots_ontissue,
     Spots_Post_Depth_QC = n_spots_post_depth_qc,
-    Pct_OnTissue_Retained = round((n_spots_post_depth_qc / n_spots_ontissue) * 100, 2),
+    Spots_Final = n_spots_final,
+    Pct_OnTissue_Retained = round((n_spots_final / n_spots_ontissue) * 100, 2),
     Raw_Genes = n_raw_genes,
+    Genes_Detected = n_genes_detected,
     Genes_Post_Filter = n_genes_post_filter,
-    Pct_Genes_Retained = round((n_genes_post_filter / n_raw_genes) * 100, 2),
+    Pct_Genes_Retained_OfAll = round((n_genes_post_filter / n_raw_genes) * 100, 2),
+    Pct_Genes_Retained_OfDetected = round((n_genes_post_filter / n_genes_detected) * 100, 2),
     Mean_Percent_MT = round(mean(spatial_obj$percent.mt, na.rm = TRUE), 2),
     Mean_Percent_Ribo = round(mean(spatial_obj$percent.ribo, na.rm = TRUE), 2),
     stringsAsFactors = FALSE
@@ -213,7 +224,9 @@ analyze_sample <- function(sample_name) {
 
   ggsave(file.path(entropy_dir, paste0(sample_name, "_spatial_entropy_plot.png")), plot = p_raw, width = 8, height = 7, dpi = 300)
 
-  # Normalization QC & Covariate checks: correlations against nCount, nFeature, percent.mt, percent.ribo
+  # Normalization QC & Covariate checks: correlations against nCount, nFeature, percent.mt.
+  # percent.ribo is not a target -- it is identically zero cohort-wide (D2); the
+  # Mean_Percent_Ribo column above is retained as the record of that zero.
   corr_res <- calculate_entropy_correlations(
     seurat_obj = spatial_obj,
     entropy_cols = c("shannon_entropy_raw", "shannon_entropy"),

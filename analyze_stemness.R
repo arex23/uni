@@ -39,8 +39,13 @@ analyze_stemness_sample <- function(sample_name) {
     mean_counts <- round(Matrix::rowMeans(sub_counts), 3)
     for (g in genes_in_data) {
       pct_val <- pct_spots[[g]]
-      det_level <- if (pct_val >= 5.0) {
-        "robust (>=5%)"
+      # Labels match the detection tiers reported in D4. They describe how often
+      # a probe is seen, not how trustworthy it is: POU5F1 and PROM1 land in the
+      # moderate tier but are flagged for pseudogene / cross-hybridisation checks.
+      det_level <- if (pct_val >= 50.0) {
+        "robust (>=50%)"
+      } else if (pct_val >= 5.0) {
+        "moderate (5-50%)"
       } else if (pct_val >= 1.0) {
         "low (1-5%)"
       } else {
@@ -69,9 +74,6 @@ analyze_stemness_sample <- function(sample_name) {
   }
   detection_df <- do.call(rbind, detection_rows[panel])
 
-  cat("Stemness marker detection summary:\n")
-  print(detection_df)
-
   out_dir <- file.path("results", "stemness_analysis")
   if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
@@ -96,6 +98,7 @@ analyze_stemness_sample <- function(sample_name) {
   }
 
   # Report individual marker detection rates
+  cat("Stemness marker detection summary:\n")
   for (g in genes_in_data) {
     cat(sprintf("  - %s: %s of spots (mean count: %s, %s)\n",
                 g,

@@ -1,2 +1,2 @@
-"Sample","Raw_Spots","Raw_Genes","Spots_Post_QC","Spots_Post_Coord_Align","Genes_Post_Filter","Pct_Spots_Retained","Pct_Genes_Retained","Mean_Percent_MT","Mean_Percent_Ribo"
-"sample1",14336,37082,13889,11709,15556,81.68,41.95,3.83,0
+"Sample","Raw_Spots_Grid","Spots_On_Tissue","Spots_Post_Depth_QC","Spots_Final","Pct_OnTissue_Retained","Raw_Genes","Genes_Detected","Genes_Post_Filter","Pct_Genes_Retained_OfAll","Pct_Genes_Retained_OfDetected","Mean_Percent_MT","Mean_Percent_Ribo"
+"sample1",14336,11713,11709,11709,99.97,37082,18989,15556,41.95,81.92,3.83,0

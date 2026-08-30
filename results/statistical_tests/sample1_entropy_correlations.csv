@@ -1,9 +1,7 @@
-"Sample","Entropy_Metric","Target_Variable","Pearson_r","Pearson_p","Spearman_rho","Spearman_p"
-"sample1","Shannon Entropy (Raw)","nCounts",0.6797,"0.00e+00",0.736,"0.00e+00"
-"sample1","Shannon Entropy (Raw)","nFeatures",0.8723,"0.00e+00",0.8224,"0.00e+00"
-"sample1","Shannon Entropy (Raw)","Percent_MT",-0.3845,"0.00e+00",-0.1098,"1.00e-32"
-"sample1","Shannon Entropy (Raw)","Percent_Ribo",NA,"NA",NA,"NA"
-"sample1","Shannon Entropy (Normalized)","nCounts",0.6538,"0.00e+00",0.87,"0.00e+00"
-"sample1","Shannon Entropy (Normalized)","nFeatures",0.7337,"0.00e+00",0.8932,"0.00e+00"
-"sample1","Shannon Entropy (Normalized)","Percent_MT",-0.1532,"2.08e-62",-0.2051,"1.80e-111"
-"sample1","Shannon Entropy (Normalized)","Percent_Ribo",NA,"NA",NA,"NA"
+"Sample","Entropy_Metric","Target_Variable","N","Pearson_r","Pearson_p","Pearson_log10_p","Pearson_CI_low","Pearson_CI_high","Spearman_rho","Spearman_p","Spearman_log10_p","Spearman_CI_low","Spearman_CI_high"
+"sample1","Shannon Entropy (Raw)","nCounts",11709,0.679683769440966,0,-1577.68896520843,0.669816824479588,0.689310719590808,0.736048959788956,0,-1985.8361527018,0.727384643445491,0.744478639021938
+"sample1","Shannon Entropy (Raw)","nFeatures",11709,0.872313844396917,0,-3639.89175709966,0.86791401719378,0.876576795912216,0.822414514717113,0,-2869.94261146333,0.816285179499974,0.828358680037862
+"sample1","Shannon Entropy (Raw)","Percent_MT",11709,-0.384547958546613,0,-408.522710096509,-0.399875905727164,-0.369004982653729,-0.109779605110948,1.00299704045591e-32,-31.9987003484507,-0.128165826937968,-0.0913179469487277
+"sample1","Shannon Entropy (Normalized)","nCounts",11709,0.653826132789208,0,-1419.7583999083,0.643331808764747,0.664074799344366,0.869984487331164,0,-3597.09731612523,0.865375735064993,0.874446082289931
+"sample1","Shannon Entropy (Normalized)","nFeatures",11709,0.733666329759503,0,-1966.48165839369,0.725190192467555,0.741920141420877,0.893226961166373,0,-4066.37737813118,0.889393369446273,0.896934929803975
+"sample1","Shannon Entropy (Normalized)","Percent_MT",11709,-0.153184290984518,2.07715131976266e-62,-61.6825318641081,-0.17082356062415,-0.135446862859026,-0.20514280022806,1.80323533546166e-111,-110.743947590958,-0.222938528066621,-0.187210389838226

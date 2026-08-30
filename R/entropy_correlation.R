@@ -17,11 +17,14 @@ calculate_entropy_correlations <- function(seurat_obj,
     if (is.null(count_col)) count_col <- grep("^nCount", colnames(meta), value = TRUE)[1]
     if (is.null(feature_col)) feature_col <- grep("^nFeature", colnames(meta), value = TRUE)[1]
     mt_col <- grep("^(percent\\.mt|percent_mt|percent_mito)", colnames(meta), value = TRUE, ignore.case = TRUE)[1]
-    ribo_col <- grep("^(percent\\.ribo|percent_ribo|percent\\.rp)", colnames(meta), value = TRUE, ignore.case = TRUE)[1]
 
+    # percent.ribo is deliberately not a default target: the probe panel carries
+    # no cytoplasmic ribosomal probes, so the covariate is identically zero in
+    # every sample (D2, results/cohort_qc/chemistry_check.csv) and correlating
+    # against it only emits all-NA rows and empty plot panels. Pass it via
+    # `targets` explicitly if a future chemistry ever populates those rows.
     targets <- c(nCounts = count_col, nFeatures = feature_col)
     if (!is.na(mt_col) && !is.null(mt_col)) targets["Percent_MT"] <- mt_col
-    if (!is.na(ribo_col) && !is.null(ribo_col)) targets["Percent_Ribo"] <- ribo_col
   }
 
   sample_prefix <- if (!is.null(sample_name) && nchar(sample_name) > 0) sample_name else "Sample"
@@ -34,6 +37,10 @@ calculate_entropy_correlations <- function(seurat_obj,
       "Shannon Entropy (Normalized)"
     } else if (e_col == "shannon_entropy_raw") {
       "Shannon Entropy (Raw)"
+    } else if (e_col == "shannon_entropy_log") {
+      "Shannon Entropy (SpaNorm Log-Scale)"
+    } else if (e_col == "shannon_entropy_linear") {
+      "Shannon Entropy (SpaNorm Linear)"
     } else {
       e_col
     }
@@ -88,10 +95,20 @@ calculate_entropy_correlations <- function(seurat_obj,
         s_rho <- if (!is.null(s_test$estimate) && !is.na(s_test$estimate)) unname(s_test$estimate) else NA_real_
         s_pval <- if (!is.null(s_test$p.value) && !is.na(s_test$p.value)) unname(s_test$p.value) else NA_real_
 
-        # Spearman 95% Confidence Interval via Fisher-z transformation
+        # Spearman log10 p-value via the same t approximation cor.test uses (exact = FALSE)
+        s_log10_pval <- if (!is.na(s_rho) && N > 2 && abs(s_rho) < 1) {
+          t_s <- s_rho * sqrt((N - 2) / (1 - s_rho^2))
+          (log(2) + pt(-abs(t_s), df = N - 2, log.p = TRUE)) / log(10)
+        } else {
+          NA_real_
+        }
+
+        # Spearman 95% Confidence Interval via Fisher-z transformation.
+        # SE uses the Bonett-Wright correction sqrt(1.06 / (N - 3)); the plain
+        # Pearson SE 1 / sqrt(N - 3) understates the width for rank correlations.
         if (!is.na(s_rho) && N > 3 && abs(s_rho) < 1) {
           z_val <- atanh(s_rho)
-          se_z <- 1 / sqrt(N - 3)
+          se_z <- sqrt(1.06 / (N - 3))
           crit_z <- qnorm(0.975)
           s_ci_low <- tanh(z_val - crit_z * se_z)
           s_ci_high <- tanh(z_val + crit_z * se_z)
@@ -110,6 +127,7 @@ calculate_entropy_correlations <- function(seurat_obj,
         p_ci_high <- NA_real_
         s_rho <- NA_real_
         s_pval <- NA_real_
+        s_log10_pval <- NA_real_
         s_ci_low <- NA_real_
         s_ci_high <- NA_real_
       }
@@ -130,6 +148,8 @@ calculate_entropy_correlations <- function(seurat_obj,
 
       s_str <- if (is.na(s_pval) || is.nan(s_pval)) {
         "NA"
+      } else if (!is.na(s_log10_pval) && s_log10_pval < -300) {
+        sprintf("10^%.1f", s_log10_pval)
       } else if (s_pval < 0.0001) {
         sprintf("%.2e", s_pval)
       } else {
@@ -148,6 +168,7 @@ calculate_entropy_correlations <- function(seurat_obj,
         Pearson_CI_high = p_ci_high,
         Spearman_rho = s_rho,
         Spearman_p = s_pval,
+        Spearman_log10_p = s_log10_pval,
         Spearman_CI_low = s_ci_low,
         Spearman_CI_high = s_ci_high,
         stringsAsFactors = FALSE
