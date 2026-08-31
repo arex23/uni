@@ -8,14 +8,6 @@ library(patchwork)
 
 source("R/shannon_entropy.R")
 source("R/entropy_correlation.R")
-source("R/spanorm_lowmem.R")
-
-# Replace SpaNorm's logpac adjustment with the gene-blocked kernel. The public
-# SpaNorm::SpaNorm() call below is unchanged and the output is bit-identical;
-# only the peak memory of the adjustment step changes. Unpatched, that step
-# holds ~10 dense 15,556 x 11,709 doubles at once (~13.6 GB) and is what pushes
-# a 15.1 GB machine into the OOM killer. See R/spanorm_lowmem.R.
-enable_spanorm_lowmem()
 
 # Define S4 method for SpaNorm on Seurat objects using public APIs
 setMethod("SpaNorm", signature(spe = "Seurat"), function(spe,
@@ -63,19 +55,7 @@ setMethod("SpaNorm", signature(spe = "Seurat"), function(spe,
   )
 
   norm_mat <- SummarizedExperiment::assay(spe_norm, "logcounts")
-
-  # Release every other reference to the dense normalised matrix before building
-  # the sparse copy, so the two representations are never alive simultaneously
-  # alongside the SpatialExperiment that also holds the dense one.
-  rm(spe_norm, spe_exp, counts_mat, coords_mat, coords_df)
-  gc(verbose = FALSE)
-
-  norm_mat <- as(norm_mat, "CsparseMatrix")
-  gc(verbose = FALSE)
-
-  spe[["Spatial"]]$data <- norm_mat
-  rm(norm_mat)
-  gc(verbose = FALSE)
+  spe[["Spatial"]]$data <- as(norm_mat, "CsparseMatrix")
   return(spe)
 })
 

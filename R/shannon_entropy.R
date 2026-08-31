@@ -24,17 +24,37 @@ calculate_shannon_entropy <- function(seurat_obj,
   col_sums <- Matrix::colSums(expr_mat)
 
   if (inherits(expr_mat, "dgCMatrix")) {
-    counts_per_cell <- diff(expr_mat@p)
-    denom <- col_sums[rep.int(seq_len(ncol(expr_mat)), counts_per_cell)]
+    # Entropy is a per-spot quantity, so the sparse branch runs over blocks of
+    # columns rather than the whole matrix at once. Done unblocked, each of
+    # `denom`, `p`, `valid_p`, `!valid_p` and the `-p * log2(p)` temporaries is
+    # as long as nnz(expr_mat) (~76M for sample1, ~0.6 GB per double vector) and
+    # `mat_entropy` is a second full copy of the matrix, which put the peak for
+    # this function near 5 GB above baseline. The arithmetic per column is
+    # unchanged -- `col_sums` is still computed once over the full matrix -- so
+    # the returned vector is identical, block size only bounds the temporaries.
+    ncells <- ncol(expr_mat)
+    full_entropy <- numeric(ncells)
+    nnz_budget <- getOption("entropy.block.nnz", 1e6)
+    nnz_per_cell <- max(1, length(expr_mat@x) / max(1, ncells))
+    block.cells <- max(1L, min(ncells, as.integer(floor(nnz_budget / nnz_per_cell))))
 
-    p <- expr_mat@x / denom
-    valid_p <- p > 0 & !is.na(p)
+    for (start in seq.int(1L, ncells, by = block.cells)) {
+      cols <- seq.int(start, min(start + block.cells - 1L, ncells))
+      sub <- expr_mat[, cols, drop = FALSE]
 
-    mat_entropy <- expr_mat
-    mat_entropy@x[!valid_p] <- 0
-    mat_entropy@x[valid_p] <- -p[valid_p] * log2(p[valid_p])
+      counts_per_cell <- diff(sub@p)
+      denom <- col_sums[cols][rep.int(seq_along(cols), counts_per_cell)]
 
-    full_entropy <- Matrix::colSums(mat_entropy)
+      p <- sub@x / denom
+      valid_p <- p > 0 & !is.na(p)
+
+      mat_entropy <- sub
+      mat_entropy@x[!valid_p] <- 0
+      mat_entropy@x[valid_p] <- -p[valid_p] * log2(p[valid_p])
+
+      full_entropy[cols] <- Matrix::colSums(mat_entropy)
+    }
+    names(full_entropy) <- colnames(expr_mat)
   } else {
     full_entropy <- apply(expr_mat, 2, function(x) {
       x <- x[x > 0]

@@ -27,6 +27,7 @@ Tirocinio/
 │   ├── stemness_analysis/              # stemness score vs entropy correlations, spatial plots, and marker QC
 │   └── <other-folders-from-each-script-output>
 ├── docs/
+    ├── PROPOSED_FIXES.md
 │   └── DECISIONS.md                    # methodology decisions + rationale, updated as the project evolves
 ├── R/
 │   ├── shannon_entropy.R               # Shannon entropy calculation function
@@ -34,7 +35,9 @@ Tirocinio/
 ├── AGENTS.md                           # rules/context for AI coding agents (Antigravity, Claude Code)
 ├── environment.yml                     # conda environment
 ├── analyze_entropy.R                   # Stage 1: preprocessing, SpaNorm normalization, entropy calculation
-└── analyze_stemness.R                  # Stage 2: stemness module scoring, correlation, and comparison
+├── analyze_stemness.R                  # Stage 2: stemness module scoring, correlation, and comparison
+├── check_cohort_chemistry.R
+└── diagnose_entropy_scaling.R
 ```
 
 ## Pipeline order
