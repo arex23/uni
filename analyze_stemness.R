@@ -5,6 +5,7 @@ library(ggplot2)
 library(patchwork)
 
 source("R/entropy_correlation.R")
+source("R/quality_confound.R")
 
 # Define reference stemness markers panel
 stemness_genes <- list(c("PROM1", "SOX2", "POU5F1", "NANOG", "NES", "CD44", "MYC"))
@@ -136,6 +137,23 @@ analyze_stemness_sample <- function(sample_name) {
     ggsave(file.path(out_dir, paste0(sample_name, "_spatial_comparison.png")),
            plot = p_spatial, width = 12, height = 5, dpi = 300)
     cat("Spatial comparison plot saved to", out_dir, "\n")
+
+    # Quality confound gate (D3): the rarefied metric correlates with percent.mt
+    # more strongly than with stemness, and low-depth spots are high-MT, so the
+    # entropy-stemness association has to be shown to survive adjustment for spot
+    # quality before it is treated as biology.
+    run_quality_confound_check(
+      seurat_obj = spatial_obj,
+      entropy_cols = ent_cols,
+      score_col = "Stemness_Score1",
+      mt_col = "percent.mt",
+      count_col = "nCount_Spatial",
+      feature_col = "nFeature_Spatial",
+      mt_threshold = 10,
+      sample_name = sample_name,
+      output_dir = out_dir,
+      save_outputs = TRUE
+    )
   } else {
     warning("No entropy columns found in metadata. Cannot compute stemness correlation.")
   }

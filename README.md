@@ -29,13 +29,15 @@ Tirocinio/
 │   └── <other-folders-from-each-script-output>
 ├── docs/
 │   ├── PROPOSED_FIXES.md
+│   ├── STAGE_3_ANALYSIS.md             # Stage 3 output review: rarefaction results and the quality confound
 │   ├── DECISIONS.md                    # methodology decisions + rationale, updated as the project evolves
 │   └── reference_unoptimized/          # Pre-optimization reference copies of pipeline scripts
 ├── R/
 │   ├── shannon_entropy.R               # Rarefied & plug-in Shannon entropy calculation (column-blocked sparse)
 │   ├── gene_universe.R                 # Cohort gene universe loading and filtering helpers
 │   ├── spanorm_lowmem.R                # Gene-blocked low-memory SpaNorm logpac adjustment kernel
-│   └── entropy_correlation.R           # Generalized correlation & publication scatterplot function
+│   ├── entropy_correlation.R           # Generalized correlation & publication scatterplot function
+│   └── quality_confound.R              # Spot-quality confound control: partial & subset correlations
 ├── AGENTS.md                           # rules/context for AI coding agents (Antigravity, Claude Code)
 ├── environment.yml                     # conda environment
 ├── check_cohort_chemistry.R            # Stage 0: Chemistry and feature grid verification across 22 samples
@@ -53,7 +55,7 @@ Tirocinio/
 3. `sweep_rarefaction_depth.R` — evaluates candidate downsampling depths $D \in \{1000, 2000, 3000, 5000, 8000\}$ for spot retention and depth decoupling. Reads raw counts from the sample `.h5`, not from the Seurat object, so it runs before `analyze_entropy.R` and its retention column is not circular.
 4. `analyze_entropy.R` — filters on-tissue spots ($nCount \ge 3000, nFeature \ge 250$) and gene universe, then re-gates spots on the post-exclusion entropy-matrix depth ($\ge D$); computes primary rarefied Shannon entropy ($D = 3000, n_{\text{draws}} = 5$) and baseline raw plug-in entropy; normalizes via SpaNorm; evaluates entropy vs depth correlations.
 5. `diagnose_entropy_scaling.R` — diagnostic script comparing raw counts, log-scale SpaNorm, linear back-transformed ($2^x - 1$) SpaNorm, and rarefied entropy scaling against sequencing depth and feature support.
-6. `analyze_stemness.R` — computes stemness module score using `AddModuleScore()`, evaluates per-gene marker detection and entropy-stemness correlation using `R/entropy_correlation.R`, generates spatial comparison plots, and updates the Seurat object.
+6. `analyze_stemness.R` — computes stemness module score using `AddModuleScore()`, evaluates per-gene marker detection and entropy-stemness correlation using `R/entropy_correlation.R`, runs the spot-quality confound control (`R/quality_confound.R`: score-vs-quality correlations, entropy-stemness partial correlations given `percent.mt` and $\log(nCount)$, and `percent.mt` subset/quartile sensitivity), generates spatial comparison plots, and updates the Seurat object.
 7. `find_entropy_markers.R` — downstream differential expression and marker discovery.
 
 ## Environment setup

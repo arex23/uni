@@ -24,7 +24,7 @@ Use the conda environment defined in `environment.yml`. Don't add,
 remove, or upgrade packages without logging it in `docs/DECISIONS.md`.
 
 ## Pipeline order
-`check_cohort_chemistry.R` (Stage 0) → `build_gene_universe.R` (calls `R/gene_universe.R`) → `sweep_rarefaction_depth.R` (Stage 3 depth sweep) → `analyze_entropy.R` (calls `R/spanorm_lowmem.R`, `R/gene_universe.R`, `R/shannon_entropy.R`, `R/entropy_correlation.R`) → `diagnose_entropy_scaling.R` (Stage 2/3 scaling diagnostic) → `analyze_stemness.R` → `find_entropy_markers.R`
+`check_cohort_chemistry.R` (Stage 0) → `build_gene_universe.R` (calls `R/gene_universe.R`) → `sweep_rarefaction_depth.R` (Stage 3 depth sweep) → `analyze_entropy.R` (calls `R/spanorm_lowmem.R`, `R/gene_universe.R`, `R/shannon_entropy.R`, `R/entropy_correlation.R`) → `diagnose_entropy_scaling.R` (Stage 2/3 scaling diagnostic) → `analyze_stemness.R` (calls `R/entropy_correlation.R`, `R/quality_confound.R`) → `find_entropy_markers.R`
 
 ## Data handling
 - `data/sampleN/raw_data/` — raw per-sample Visium output. Read-only,
@@ -35,5 +35,5 @@ remove, or upgrade packages without logging it in `docs/DECISIONS.md`.
   - `results/seurat_objects/` ← normalized counts + rarefied entropy values + stemness scores (Seurat objects from `analyze_entropy.R` / `analyze_stemness.R`)
   - `results/analyze_entropy/` ← `analyze_entropy.R` (QC metrics, spatial rarefied entropy plots)
   - `results/statistical_tests/` ← `entropy_correlation.R`, `sweep_rarefaction_depth.R`, `diagnose_entropy_scaling.R`
-  - `results/stemness_analysis/` ← `analyze_stemness.R` (marker QC, stemness correlations, spatial comparisons)
+  - `results/stemness_analysis/` ← `analyze_stemness.R` (marker QC, stemness correlations, quality confound tables, spatial comparisons)
   - `results/entropy_deg_plots/` and `results/entropy_deg/` ← `find_entropy_markers.R`
