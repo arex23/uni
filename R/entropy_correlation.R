@@ -33,7 +33,11 @@ calculate_entropy_correlations <- function(seurat_obj,
   plot_list <- list()
 
   for (e_col in entropy_cols) {
-    e_label <- if (e_col == "shannon_entropy") {
+    e_label <- if (e_col == "entropy_rarefied" || e_col == "shannon_entropy_rarefied") {
+      "Shannon Entropy (Rarefied)"
+    } else if (e_col == "entropy_raw_plugin") {
+      "Shannon Entropy (Raw Plug-in)"
+    } else if (e_col == "shannon_entropy") {
       "Shannon Entropy (Normalized)"
     } else if (e_col == "shannon_entropy_raw") {
       "Shannon Entropy (Raw)"

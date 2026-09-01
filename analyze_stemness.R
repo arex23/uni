@@ -114,10 +114,11 @@ analyze_stemness_sample <- function(sample_name) {
     name = "Stemness_Score"
   )
 
-  if ("shannon_entropy" %in% colnames(spatial_obj@meta.data)) {
+  ent_cols <- intersect(c("entropy_rarefied", "entropy_raw_plugin"), colnames(spatial_obj@meta.data))
+  if (length(ent_cols) > 0) {
     cor_res <- calculate_entropy_correlations(
       seurat_obj = spatial_obj,
-      entropy_cols = "shannon_entropy",
+      entropy_cols = ent_cols,
       targets = c(Stemness = "Stemness_Score1"),
       sample_name = sample_name,
       output_dir = out_dir,
@@ -125,9 +126,10 @@ analyze_stemness_sample <- function(sample_name) {
       save_outputs = TRUE
     )
 
-    # Spatial plots side-by-side
+    # Spatial plots side-by-side (Rarefied Entropy vs Stemness Score)
+    primary_ent <- if ("entropy_rarefied" %in% ent_cols) "entropy_rarefied" else ent_cols[1]
     p_spatial <- suppressMessages(
-      SpatialFeaturePlot(spatial_obj, features = c("shannon_entropy", "Stemness_Score1")) +
+      SpatialFeaturePlot(spatial_obj, features = c(primary_ent, "Stemness_Score1")) +
         plot_layout(guides = "collect")
     )
 
@@ -135,7 +137,7 @@ analyze_stemness_sample <- function(sample_name) {
            plot = p_spatial, width = 12, height = 5, dpi = 300)
     cat("Spatial comparison plot saved to", out_dir, "\n")
   } else {
-    warning("Column 'shannon_entropy' not found in metadata. Cannot compare.")
+    warning("No entropy columns found in metadata. Cannot compute stemness correlation.")
   }
 
   # Save updated object back to disk for downstream pipeline steps (find_entropy_markers.R)

@@ -74,7 +74,6 @@ Columns produced:
 - `entropy_rarefied` — primary
 - `entropy_raw_plugin` — full-depth plug-in, demonstrates the depth bias
 
-**Do not** carry `entropy_spanorm_logscale` as a permanent column on all 22 samples. Compute it once on sample1, put the 0.9978 in D2 as the documented negative control, drop the column.
 
 SpaNorm stays in the pipeline unchanged — it remains the input for DE, module scoring and visualisation. Only the entropy input changes. Say this explicitly in D1 so nobody reads the revision as "SpaNorm was a mistake."
 

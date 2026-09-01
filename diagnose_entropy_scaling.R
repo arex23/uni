@@ -48,32 +48,23 @@ spatial_obj$n_detected_counts <- Matrix::colSums(counts_filtered > 0)
 spatial_obj$n_detected_norm <- Matrix::colSums(data_filtered > 0)
 spatial_obj$log2_n_detected_norm <- log2(spatial_obj$n_detected_norm)
 
-# 2. Raw plug-in entropy and 3. log-scale SpaNorm entropy (the existing pipeline
-#    category error) are already columns on the saved object, computed by
-#    analyze_entropy.R with this same exclude_pattern. Reuse them so the
-#    diagnostic reports exactly what the pipeline shipped; recompute only if a
-#    future object arrives without them.
-if (!"shannon_entropy_raw" %in% colnames(spatial_obj@meta.data)) {
-  spatial_obj <- calculate_shannon_entropy(
-    spatial_obj,
-    assay = "Spatial",
-    layer = "counts",
-    col.name = "shannon_entropy_raw",
-    exclude_pattern = "^(MT-|RP[SL])"
-  )
-}
+# 2. Raw plug-in entropy
+spatial_obj <- calculate_shannon_entropy(
+  spatial_obj,
+  assay = "Spatial",
+  layer = "counts",
+  col.name = "shannon_entropy_raw",
+  exclude_pattern = "^(MT-|RP[SL])"
+)
 
-if ("shannon_entropy" %in% colnames(spatial_obj@meta.data)) {
-  spatial_obj$shannon_entropy_log <- spatial_obj$shannon_entropy
-} else {
-  spatial_obj <- calculate_shannon_entropy(
-    spatial_obj,
-    assay = "Spatial",
-    layer = "data",
-    col.name = "shannon_entropy_log",
-    exclude_pattern = "^(MT-|RP[SL])"
-  )
-}
+# 3. Log-scale SpaNorm entropy (SpaNorm logpac)
+spatial_obj <- calculate_shannon_entropy(
+  spatial_obj,
+  assay = "Spatial",
+  layer = "data",
+  col.name = "shannon_entropy_log",
+  exclude_pattern = "^(MT-|RP[SL])"
+)
 
 # 4. Linear back-transformed SpaNorm entropy: 2^x - 1.
 #    SpaNorm's logpac adjustment is log2(qnbinom(...) + 1) (SpaNorm:::normaliseLogPAC),
@@ -90,6 +81,18 @@ spatial_obj <- calculate_shannon_entropy(
   col.name = "shannon_entropy_linear",
   exclude_pattern = "^(MT-|RP[SL])"
 )
+
+# 5. Rarefied Shannon entropy: depth D = 3000, n_draws = 5
+if (!"entropy_rarefied" %in% colnames(spatial_obj@meta.data)) {
+  spatial_obj <- calculate_rarefied_entropy(
+    spatial_obj,
+    depth = 3000,
+    n_draws = 5,
+    seed = 23,
+    col.name = "entropy_rarefied",
+    exclude_pattern = "^(MT-|RP[SL])"
+  )
+}
 
 out_dir <- file.path("results", "statistical_tests")
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
@@ -108,7 +111,8 @@ targets_diag <- c(
 entropy_metrics_diag <- c(
   "shannon_entropy_raw",
   "shannon_entropy_log",
-  "shannon_entropy_linear"
+  "shannon_entropy_linear",
+  "entropy_rarefied"
 )
 
 diag_res <- calculate_entropy_correlations(
