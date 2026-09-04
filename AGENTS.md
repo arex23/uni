@@ -24,7 +24,9 @@ Use the conda environment defined in `environment.yml`. Don't add,
 remove, or upgrade packages without logging it in `docs/DECISIONS.md`.
 
 ## Pipeline order
-`check_cohort_chemistry.R` (Stage 0) → `build_gene_universe.R` (calls `R/gene_universe.R`) → `sweep_rarefaction_depth.R` (Stage 3 depth sweep) → `analyze_entropy.R` (calls `R/spanorm_lowmem.R`, `R/gene_universe.R`, `R/shannon_entropy.R`, `R/entropy_correlation.R`, `R/cohort.R`) → `diagnose_entropy_scaling.R` (Stage 2/3 scaling diagnostic) → `analyze_stemness.R` (calls `R/entropy_correlation.R`, `R/quality_confound.R`, `R/cohort.R`) → `check_cohort_retention.R` (D6 retention gate) → `find_entropy_markers.R` (not yet written)
+`check_cohort_chemistry.R` (Stage 0) → `build_gene_universe.R` (calls `R/gene_universe.R`) → `analyze_entropy.R` (calls `R/spanorm_lowmem.R`, `R/gene_universe.R`, `R/shannon_entropy.R`, `R/entropy_correlation.R`, `R/cohort.R`) → `diagnose_entropy_scaling.R` (Stage 2 scaling diagnostic) → `analyze_stemness.R` (calls `R/entropy_correlation.R`, `R/quality_confound.R`, `R/cohort.R`) → `check_cohort_retention.R` (D6 retention gate) → `find_entropy_markers.R` (not yet written)
+
+`rarefaction_entropy.R` is deliberately outside this chain. Rarefaction was tried and set aside (D2); the script keeps the estimator and its depth sweep runnable on their own. The dependency runs one way only — it may `source()` files in `R/`, but nothing in `R/` and neither `analyze_entropy.R` nor `analyze_stemness.R` may reference it. Keep it that way: if a new entropy approach needs something from it, copy the piece rather than wiring the pipeline back to it.
 
 Cohort runs go through `./run_cohort.sh`, one `Rscript` process per sample per stage — SpaNorm peaks near 12.5 GB on a 15 GB machine and an in-process loop gets OOM-killed partway through.
 
@@ -37,8 +39,9 @@ Cohort runs go through `./run_cohort.sh`, one `Rscript` process per sample per s
 - All generated output goes to `results/`, mirroring the script that
   produced it:
   - `results/cohort_qc/` ← `check_cohort_chemistry.R`, `build_gene_universe.R`
-  - `results/seurat_objects/` ← normalized counts + rarefied entropy values + stemness scores (Seurat objects from `analyze_entropy.R` / `analyze_stemness.R`)
-  - `results/analyze_entropy/` ← `analyze_entropy.R` (QC metrics, spatial rarefied entropy plots)
-  - `results/statistical_tests/` ← `entropy_correlation.R`, `sweep_rarefaction_depth.R`, `diagnose_entropy_scaling.R`
+  - `results/seurat_objects/` ← normalized counts + entropy columns + stemness scores (Seurat objects from `analyze_entropy.R` / `analyze_stemness.R`)
+  - `results/analyze_entropy/` ← `analyze_entropy.R` (QC metrics, spatial entropy plots)
+  - `results/statistical_tests/` ← `entropy_correlation.R`, `diagnose_entropy_scaling.R`
+  - `results/rarefaction/` ← `rarefaction_entropy.R` (off-pipeline, D2)
   - `results/stemness_analysis/` ← `analyze_stemness.R` (marker QC, stemness correlations, quality confound tables, spatial comparisons)
   - `results/entropy_deg_plots/` and `results/entropy_deg/` ← `find_entropy_markers.R`

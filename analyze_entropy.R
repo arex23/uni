@@ -157,11 +157,14 @@ analyze_sample <- function(sample_name) {
   spatial_obj[["percent.mt"]] <- PercentageFeatureSet(spatial_obj, pattern = "^MT-")
   spatial_obj[["percent.ribo"]] <- PercentageFeatureSet(spatial_obj, pattern = "^RP[SL]")
 
-  # 1. Spot filtering by sequencing depth (nCount >= 2000, matching downsampling depth D = 2000)
-  # and feature count (nFeature >= 250) on on-tissue spots
-  target_depth_D <- 2000
+  # 1. Spot filtering by sequencing depth (nCount >= 500) and feature count
+  # (nFeature >= 250) on on-tissue spots. Both are plain quality floors: they
+  # remove barcodes too sparse to carry a usable expression profile at all, and
+  # are not tied to any downstream estimator's target depth.
+  min_counts <- 500
+  min_features <- 250
   entropy_exclude_pattern <- "^(MT-|RP[SL])"
-  valid_spots <- colnames(spatial_obj)[spatial_obj$nCount_Spatial >= target_depth_D & spatial_obj$nFeature_Spatial >= 250]
+  valid_spots <- colnames(spatial_obj)[spatial_obj$nCount_Spatial >= min_counts & spatial_obj$nFeature_Spatial >= min_features]
   spatial_obj <- subset(spatial_obj, cells = valid_spots)
   n_spots_post_depth_qc <- ncol(spatial_obj)
 
@@ -170,10 +173,12 @@ analyze_sample <- function(sample_name) {
   n_spots_post_coord <- ncol(spatial_obj)
 
   # 3. Gene universe filtering (frozen cohort gene universe, D1/D5).
-  # The per-sample spot detection threshold is dropped; rarefaction standardises
-  # depth across spots and rare genes contribute minimally to entropy.
+  # The per-sample spot detection threshold is dropped so that every sample is
+  # processed on the exact same feature space, which is what makes the cohort
+  # comparable; rare genes contribute minimally to entropy either way.
   spatial_obj <- filter_by_gene_universe(spatial_obj)
   n_genes_in_universe <- nrow(spatial_obj)
+  n_spots_final <- ncol(spatial_obj)
 
   raw_counts <- Seurat::GetAssayData(spatial_obj, assay = "Spatial", layer = "counts")
   gene_totals <- Matrix::rowSums(raw_counts > 0)
@@ -181,38 +186,7 @@ analyze_sample <- function(sample_name) {
   rm(raw_counts, valid_spots, gene_totals)
   gc()
 
-  # 3b. Second depth gate, on the matrix the entropy is actually computed from.
-  # The nCount >= D gate in step 1 is taken over all 37,082 features, but entropy
-  # is computed after the universe filter and the MT/ribo exclusion, so a spot can
-  # pass step 1 and still hold fewer than D counts here. Rarefaction cannot standardise
-  # such a spot -- downsampleMatrix would cap its sampling proportion at 1.0 and
-  # leave it at full depth -- so it is dropped rather than silently left unrarefied.
-  entropy_counts <- Seurat::GetAssayData(spatial_obj, assay = "Spatial", layer = "counts")
-  entropy_counts <- entropy_counts[!grepl(entropy_exclude_pattern, rownames(entropy_counts), ignore.case = TRUE), , drop = FALSE]
-  entropy_depth <- Matrix::colSums(entropy_counts)
-  deep_spots <- colnames(spatial_obj)[entropy_depth >= target_depth_D]
-  n_spots_dropped_entropy_depth <- ncol(spatial_obj) - length(deep_spots)
-  cat(sprintf("Entropy-matrix depth QC: dropping %d spots below D = %d after gene filtering (min depth %.0f).\n",
-              n_spots_dropped_entropy_depth, target_depth_D, min(entropy_depth)))
-  spatial_obj <- subset(spatial_obj, cells = deep_spots)
-  n_spots_final <- ncol(spatial_obj)
-  rm(entropy_counts, entropy_depth, deep_spots)
-  gc()
-
-  # 4. Calculate primary Rarefied Shannon entropy (depth D = 2000, n_draws = 5).
-  # allow_shallow stays FALSE: after 3b every spot has >= D counts in this matrix,
-  # and the function errors rather than silently capping if that ever stops holding.
-  spatial_obj <- calculate_rarefied_entropy(
-    spatial_obj,
-    depth = target_depth_D,
-    n_draws = 5,
-    seed = 23,
-    col.name = "entropy_rarefied",
-    exclude_pattern = entropy_exclude_pattern,
-    allow_shallow = FALSE
-  )
-
-  # 5. Calculate baseline full-depth raw plug-in Shannon entropy (demonstrates depth bias)
+  # 4. Baseline full-depth plug-in Shannon entropy on raw counts.
   spatial_obj <- calculate_shannon_entropy(
     spatial_obj,
     assay = "Spatial",
@@ -221,7 +195,7 @@ analyze_sample <- function(sample_name) {
     exclude_pattern = entropy_exclude_pattern
   )
 
-  # 6. SpaNorm normalization using direct public API (used for downstream DE, scoring, viz)
+  # 5. SpaNorm normalization using direct public API (used for downstream DE, scoring, viz)
   spatial_obj <- SpaNorm::SpaNorm(
     spatial_obj,
     sample.p = 0.25,
@@ -231,6 +205,21 @@ analyze_sample <- function(sample_name) {
     lambda.a = 1e-04,
     verbose = TRUE
   )
+
+  # 6. Plug-in Shannon entropy on the SpaNorm logpac `data` layer, as the second
+  # baseline. Recorded with its known defect attached: on this layer the metric is
+  # near-degenerate against the detected-gene count K (sample1: r = 0.9986 against
+  # log2(K), diagnose_entropy_scaling.R), because the log2(qnbinom(.) + 1)
+  # compression flattens the relative proportions towards 1/K. It is kept as a
+  # documented reference point, not as a candidate metric.
+  spatial_obj <- calculate_shannon_entropy(
+    spatial_obj,
+    assay = "Spatial",
+    layer = "data",
+    col.name = "entropy_spanorm_plugin",
+    exclude_pattern = entropy_exclude_pattern
+  )
+  gc()
 
   entropy_dir <- file.path("results", "analyze_entropy")
   stat_dir <- file.path("results", "statistical_tests")
@@ -247,7 +236,6 @@ analyze_sample <- function(sample_name) {
     Spots_On_Tissue = n_spots_ontissue,
     Spots_Post_Depth_QC = n_spots_post_depth_qc,
     Spots_Post_Coord_Validation = n_spots_post_coord,
-    Spots_Dropped_Entropy_Depth = n_spots_dropped_entropy_depth,
     Spots_Final = n_spots_final,
     Pct_OnTissue_Retained = round((n_spots_final / n_spots_ontissue) * 100, 2),
     Raw_Genes = n_raw_genes,
@@ -261,24 +249,24 @@ analyze_sample <- function(sample_name) {
     Pct_Universe_Detected = round((n_genes_detected / n_genes_in_universe) * 100, 2),
     Mean_Percent_MT = round(mean(spatial_obj$percent.mt, na.rm = TRUE), 2),
     Mean_Percent_Ribo = round(mean(spatial_obj$percent.ribo, na.rm = TRUE), 2),
-    Mean_Rarefied_Entropy = round(mean(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
-    SD_Rarefied_Entropy = round(sd(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
-    Median_Rarefied_Entropy = round(median(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
-    IQR_Rarefied_Entropy = round(IQR(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
-    Min_Rarefied_Entropy = round(min(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
-    Max_Rarefied_Entropy = round(max(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
-    Range_Rarefied_Entropy = round(diff(range(spatial_obj$entropy_rarefied, na.rm = TRUE)), 4),
+    Mean_Raw_Plugin_Entropy = round(mean(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
+    SD_Raw_Plugin_Entropy = round(sd(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
+    Median_Raw_Plugin_Entropy = round(median(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
+    IQR_Raw_Plugin_Entropy = round(IQR(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
+    Min_Raw_Plugin_Entropy = round(min(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
+    Max_Raw_Plugin_Entropy = round(max(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
+    Range_Raw_Plugin_Entropy = round(diff(range(spatial_obj$entropy_raw_plugin, na.rm = TRUE)), 4),
     stringsAsFactors = FALSE
   )
   write.csv(qc_df, file.path(entropy_dir, paste0(sample_name, "_qc_metrics.csv")), row.names = FALSE)
   cat(sprintf("Logged QC metrics to %s\n", file.path(entropy_dir, paste0(sample_name, "_qc_metrics.csv"))))
 
-  # Spatial rarefied entropy visualization plot
+  # Spatial entropy visualization plot
   p_raw <- suppressMessages(
-    SpatialFeaturePlot(spatial_obj, features = "entropy_rarefied") +
-      scale_fill_viridis_c(option = "magma", name = "Rarefied\nEntropy\n(D=2000)")
+    SpatialFeaturePlot(spatial_obj, features = "entropy_raw_plugin") +
+      scale_fill_viridis_c(option = "magma", name = "Shannon\nEntropy\n(plug-in)")
   ) +
-    ggtitle(paste("Spatial Distribution of Rarefied Shannon Entropy (D=2000) -", sample_name)) +
+    ggtitle(paste("Spatial Distribution of Plug-in Shannon Entropy -", sample_name)) +
     theme(
       plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
       legend.title = element_text(size = 11),
@@ -287,10 +275,10 @@ analyze_sample <- function(sample_name) {
 
   ggsave(file.path(entropy_dir, paste0(sample_name, "_spatial_entropy_plot.png")), plot = p_raw, width = 8, height = 7, dpi = 300)
 
-  # Normalization QC & Covariate checks: evaluate both entropy_rarefied and entropy_raw_plugin
+  # Normalization QC & Covariate checks: evaluate both plug-in baselines
   corr_res <- calculate_entropy_correlations(
     seurat_obj = spatial_obj,
-    entropy_cols = c("entropy_rarefied", "entropy_raw_plugin"),
+    entropy_cols = c("entropy_raw_plugin", "entropy_spanorm_plugin"),
     sample_name = sample_name,
     output_dir = stat_dir
   )

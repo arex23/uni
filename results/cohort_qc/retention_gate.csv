@@ -1,0 +1,2 @@
+"Sample","Spots_On_Tissue","Spots_Post_Depth_QC","Spots_Final","Pct_OnTissue_Retained","Mean_Percent_MT","Mean_Raw_Plugin_Entropy","SD_Raw_Plugin_Entropy","Passes_Retention_Gate"
+"sample1",11713,11709,11709,99.97,3.83,11.74,0.2691,TRUE

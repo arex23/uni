@@ -82,18 +82,6 @@ spatial_obj <- calculate_shannon_entropy(
   exclude_pattern = "^(MT-|RP[SL])"
 )
 
-# 5. Rarefied Shannon entropy: depth D = 2000, n_draws = 5
-if (!"entropy_rarefied" %in% colnames(spatial_obj@meta.data)) {
-  spatial_obj <- calculate_rarefied_entropy(
-    spatial_obj,
-    depth = 2000,
-    n_draws = 5,
-    seed = 23,
-    col.name = "entropy_rarefied",
-    exclude_pattern = "^(MT-|RP[SL])"
-  )
-}
-
 out_dir <- file.path("results", "statistical_tests")
 if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
 
@@ -111,8 +99,7 @@ targets_diag <- c(
 entropy_metrics_diag <- c(
   "shannon_entropy_raw",
   "shannon_entropy_log",
-  "shannon_entropy_linear",
-  "entropy_rarefied"
+  "shannon_entropy_linear"
 )
 
 diag_res <- calculate_entropy_correlations(
@@ -125,7 +112,7 @@ diag_res <- calculate_entropy_correlations(
   save_outputs = TRUE
 )
 
-# 5. Degeneracy fit. If the log transform has flattened p_i towards 1/K, entropy
+# 6. Degeneracy fit. If the log transform has flattened p_i towards 1/K, entropy
 #    collapses onto log2(K) with unit slope. Emitting the fit (rather than
 #    asserting it in the docs) makes the H ~ log2(K) claim reproducible.
 log2_K <- spatial_obj$log2_n_detected_norm
@@ -166,7 +153,8 @@ value_range_df <- data.frame(
 # zero raw counts and zeroes genes with non-zero counts, so n_detected_norm is
 # far narrower than n_detected_counts. Recorded because it is what separates the
 # log-scale degeneracy (driven by n_detected_norm) from the raw depth ceiling
-# (driven by n_detected_counts) that Stage 3 rarefaction targets.
+# (driven by n_detected_counts): they are two different defects, and any
+# replacement estimator has to be judged against both.
 support_df <- data.frame(
   Sample = target_sample,
   Support = c("n_detected_counts", "n_detected_norm"),

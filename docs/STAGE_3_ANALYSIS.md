@@ -1,3 +1,4 @@
+> **Superseded (2026-09-04).** Rarefaction was set aside as the route for this project; see D2 in `DECISIONS.md`. This note is kept as the dated record of what the rarefaction run showed — including the `percent.mt` coupling below, which is what argued against the metric. The code it describes now lives in the standalone `rarefaction_entropy.R`.
 
 ## What rarefaction did
 

@@ -1,13 +1,14 @@
 # R/quality_confound.R
-# Stage 3 gate: is the entropy-stemness association driven by spot quality?
+# Gate: is the entropy-stemness association driven by spot quality?
 #
-# Rarefaction removed the depth-driven support ceiling but left `entropy_rarefied`
-# with a positive association to `percent.mt` (sample1: r = +0.329, rho = +0.298)
-# that is larger than the stemness association it is supposed to license, and the
-# stemness association itself only appeared in the same step. The mechanism to
-# rule out: a degraded, high-MT spot has flatter, more ambient-like non-MT signal,
-# which at fixed depth D reads as higher diversity; if `Stemness_Score1` also
-# tracks degradation, the entropy-stemness correlation is a quality artefact.
+# The mechanism to rule out: a degraded, high-MT spot has flatter, more
+# ambient-like non-MT signal, which reads as higher transcriptional diversity, and
+# shallow spots are the high-MT ones (cohort rho = -0.41 between depth and MT,
+# Stage 0). If `Stemness_Score1` also tracks degradation, then any
+# entropy-stemness correlation is a quality artefact rather than biology.
+#
+# The check is metric-agnostic: it runs on whichever entropy columns it is handed
+# and makes no assumption about how they were estimated.
 #
 # Provides three checks (D3):
 # 1. covariate_correlation_table() - zero-order correlations of the stemness score
@@ -25,8 +26,8 @@
 #' Label a metadata column for reporting
 confound_var_label <- function(col) {
   labels <- c(
-    entropy_rarefied = "Shannon Entropy (Rarefied)",
     entropy_raw_plugin = "Shannon Entropy (Raw Plug-in)",
+    entropy_spanorm_plugin = "Shannon Entropy (SpaNorm Plug-in)",
     Stemness_Score1 = "Stemness Score",
     percent.mt = "Percent_MT",
     percent.ribo = "Percent_Ribo",
@@ -230,7 +231,7 @@ partial_correlation_table <- function(data, x_col, y_col, covariate_sets, sample
 #' @param mt_threshold percent.mt cut defining the "clean" subset
 #' @return Named list of the three tables (invisibly NULL if prerequisites are missing)
 run_quality_confound_check <- function(seurat_obj,
-                                       entropy_cols = c("entropy_rarefied", "entropy_raw_plugin"),
+                                       entropy_cols = c("entropy_raw_plugin", "entropy_spanorm_plugin"),
                                        score_col = "Stemness_Score1",
                                        mt_col = "percent.mt",
                                        count_col = "nCount_Spatial",
@@ -392,8 +393,9 @@ run_quality_confound_check <- function(seurat_obj,
   }
 
   p1 <- panel(meta, mt_col, score_col, "Stemness Score vs Percent MT", anno(covariate_table, score_col, mt_col))
-  p2 <- panel(meta, mt_col, primary_ent, "Rarefied Entropy vs Percent MT", anno(covariate_table, primary_ent, mt_col))
-  p3 <- panel(meta, score_col, primary_ent, "Rarefied Entropy vs Stemness Score",
+  ent_label <- confound_var_label(primary_ent)
+  p2 <- panel(meta, mt_col, primary_ent, paste(ent_label, "vs Percent MT"), anno(covariate_table, primary_ent, mt_col))
+  p3 <- panel(meta, score_col, primary_ent, paste(ent_label, "vs Stemness Score"),
               anno(covariate_table, primary_ent, score_col), color_col = mt_col)
 
   res_stats <- partial_correlation_stats(meta, primary_ent, score_col, c(mt_col, log_count_col), method = "pearson")
