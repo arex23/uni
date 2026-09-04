@@ -10,6 +10,7 @@ source("R/shannon_entropy.R")
 source("R/entropy_correlation.R")
 source("R/spanorm_lowmem.R")
 source("R/gene_universe.R")
+source("R/cohort.R")
 
 # Replace SpaNorm's logpac adjustment with the gene-blocked kernel. The public
 # SpaNorm::SpaNorm() call below is unchanged and the output is bit-identical;
@@ -80,10 +81,7 @@ setMethod("SpaNorm", signature(spe = "Seurat"), function(spe,
   return(spe)
 })
 
-samples <- list.dirs("data", full.names = FALSE, recursive = FALSE)
-samples <- samples[grepl("sample[0-9]+$", samples)]
-sample_nums <- as.numeric(gsub(".*sample", "", samples))
-samples <- samples[order(sample_nums)]
+samples <- cohort_samples()
 
 validate_imaged_coordinates <- function(seurat_obj) {
   counts_mat <- Seurat::GetAssayData(seurat_obj, assay = "Spatial", layer = "counts")
@@ -135,22 +133,33 @@ analyze_sample <- function(sample_name) {
 
   # Load tissue positions and explicitly subset to in_tissue == 1 spots
   tp_df <- read.csv(tp_file)
-  ontissue_barcodes <- if ("in_tissue" %in% colnames(tp_df)) {
-    tp_df$barcode[tp_df$in_tissue == 1]
+  if ("in_tissue" %in% colnames(tp_df)) {
+    ontissue_barcodes <- tp_df$barcode[tp_df$in_tissue == 1]
+    bc_col <- "barcode"
+    row_col <- "array_row"
+    col_col <- "array_col"
   } else {
-    tp_df[[1]][tp_df[[2]] == 1]
+    ontissue_barcodes <- tp_df[[1]][tp_df[[2]] == 1]
+    bc_col <- colnames(tp_df)[1]
+    row_col <- colnames(tp_df)[3]
+    col_col <- colnames(tp_df)[4]
   }
 
   spatial_obj <- subset(spatial_obj, cells = intersect(colnames(spatial_obj), ontissue_barcodes))
   n_spots_ontissue <- ncol(spatial_obj)
 
+  # Add Visium hexagonal array lattice coordinates to metadata for spatial modeling (Stage 4)
+  matched_idx <- match(colnames(spatial_obj), tp_df[[bc_col]])
+  spatial_obj$array_row <- tp_df[[row_col]][matched_idx]
+  spatial_obj$array_col <- tp_df[[col_col]][matched_idx]
+
   # Calculate mitochondrial and ribosomal percentages on-tissue
   spatial_obj[["percent.mt"]] <- PercentageFeatureSet(spatial_obj, pattern = "^MT-")
   spatial_obj[["percent.ribo"]] <- PercentageFeatureSet(spatial_obj, pattern = "^RP[SL]")
 
-  # 1. Spot filtering by sequencing depth (nCount >= 3000, matching downsampling depth D)
+  # 1. Spot filtering by sequencing depth (nCount >= 2000, matching downsampling depth D = 2000)
   # and feature count (nFeature >= 250) on on-tissue spots
-  target_depth_D <- 3000
+  target_depth_D <- 2000
   entropy_exclude_pattern <- "^(MT-|RP[SL])"
   valid_spots <- colnames(spatial_obj)[spatial_obj$nCount_Spatial >= target_depth_D & spatial_obj$nFeature_Spatial >= 250]
   spatial_obj <- subset(spatial_obj, cells = valid_spots)
@@ -160,29 +169,24 @@ analyze_sample <- function(sample_name) {
   spatial_obj <- validate_imaged_coordinates(spatial_obj)
   n_spots_post_coord <- ncol(spatial_obj)
 
-  # 3. Gene universe filtering and spot detection filtering
+  # 3. Gene universe filtering (frozen cohort gene universe, D1/D5).
+  # The per-sample spot detection threshold is dropped; rarefaction standardises
+  # depth across spots and rare genes contribute minimally to entropy.
   spatial_obj <- filter_by_gene_universe(spatial_obj)
   n_genes_in_universe <- nrow(spatial_obj)
 
   raw_counts <- Seurat::GetAssayData(spatial_obj, assay = "Spatial", layer = "counts")
-  min_spots_per_gene <- max(20, ceiling(0.02 * ncol(spatial_obj)))
   gene_totals <- Matrix::rowSums(raw_counts > 0)
   n_genes_detected <- sum(gene_totals > 0)
-  expressed_genes <- rownames(raw_counts)[gene_totals >= min_spots_per_gene]
-
-  spatial_obj <- subset(spatial_obj, features = expressed_genes)
-  n_genes_post_filter <- nrow(spatial_obj)
-  rm(raw_counts, valid_spots, expressed_genes, gene_totals)
+  rm(raw_counts, valid_spots, gene_totals)
   gc()
 
   # 3b. Second depth gate, on the matrix the entropy is actually computed from.
   # The nCount >= D gate in step 1 is taken over all 37,082 features, but entropy
-  # is computed after the universe filter, the detection filter and the MT/ribo
-  # exclusion, so a spot can pass step 1 and still hold fewer than D counts here.
-  # Rarefaction cannot standardise such a spot -- downsampleMatrix would cap its
-  # sampling proportion at 1.0 and leave it at full depth -- so it is dropped
-  # rather than silently left unrarefied. Gene filtering above stays computed on
-  # the step-1 spot set; these spots are too few to move the detection threshold.
+  # is computed after the universe filter and the MT/ribo exclusion, so a spot can
+  # pass step 1 and still hold fewer than D counts here. Rarefaction cannot standardise
+  # such a spot -- downsampleMatrix would cap its sampling proportion at 1.0 and
+  # leave it at full depth -- so it is dropped rather than silently left unrarefied.
   entropy_counts <- Seurat::GetAssayData(spatial_obj, assay = "Spatial", layer = "counts")
   entropy_counts <- entropy_counts[!grepl(entropy_exclude_pattern, rownames(entropy_counts), ignore.case = TRUE), , drop = FALSE]
   entropy_depth <- Matrix::colSums(entropy_counts)
@@ -195,7 +199,7 @@ analyze_sample <- function(sample_name) {
   rm(entropy_counts, entropy_depth, deep_spots)
   gc()
 
-  # 4. Calculate primary Rarefied Shannon entropy (depth D = 3000, n_draws = 5).
+  # 4. Calculate primary Rarefied Shannon entropy (depth D = 2000, n_draws = 5).
   # allow_shallow stays FALSE: after 3b every spot has >= D counts in this matrix,
   # and the function errors rather than silently capping if that ever stops holding.
   spatial_obj <- calculate_rarefied_entropy(
@@ -249,11 +253,21 @@ analyze_sample <- function(sample_name) {
     Raw_Genes = n_raw_genes,
     Genes_In_Universe = n_genes_in_universe,
     Genes_Detected = n_genes_detected,
-    Genes_Post_Filter = n_genes_post_filter,
-    Pct_Genes_Retained_OfUniverse = round((n_genes_post_filter / n_genes_in_universe) * 100, 2),
-    Pct_Genes_Retained_OfDetected = round((n_genes_post_filter / n_genes_detected) * 100, 2),
+    # With the per-sample detection filter dropped, the feature set is the frozen
+    # universe for every sample, so a "genes retained" percentage is always 100
+    # and its detected-denominator variant exceeds 100 whenever a universe gene
+    # goes unobserved here. The informative direction is the other one: how much
+    # of the frozen feature space this sample actually observes.
+    Pct_Universe_Detected = round((n_genes_detected / n_genes_in_universe) * 100, 2),
     Mean_Percent_MT = round(mean(spatial_obj$percent.mt, na.rm = TRUE), 2),
     Mean_Percent_Ribo = round(mean(spatial_obj$percent.ribo, na.rm = TRUE), 2),
+    Mean_Rarefied_Entropy = round(mean(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
+    SD_Rarefied_Entropy = round(sd(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
+    Median_Rarefied_Entropy = round(median(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
+    IQR_Rarefied_Entropy = round(IQR(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
+    Min_Rarefied_Entropy = round(min(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
+    Max_Rarefied_Entropy = round(max(spatial_obj$entropy_rarefied, na.rm = TRUE), 4),
+    Range_Rarefied_Entropy = round(diff(range(spatial_obj$entropy_rarefied, na.rm = TRUE)), 4),
     stringsAsFactors = FALSE
   )
   write.csv(qc_df, file.path(entropy_dir, paste0(sample_name, "_qc_metrics.csv")), row.names = FALSE)
@@ -262,9 +276,9 @@ analyze_sample <- function(sample_name) {
   # Spatial rarefied entropy visualization plot
   p_raw <- suppressMessages(
     SpatialFeaturePlot(spatial_obj, features = "entropy_rarefied") +
-      scale_fill_viridis_c(option = "magma", name = "Rarefied\nEntropy\n(D=3000)")
+      scale_fill_viridis_c(option = "magma", name = "Rarefied\nEntropy\n(D=2000)")
   ) +
-    ggtitle(paste("Spatial Distribution of Rarefied Shannon Entropy (D=3000) -", sample_name)) +
+    ggtitle(paste("Spatial Distribution of Rarefied Shannon Entropy (D=2000) -", sample_name)) +
     theme(
       plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
       legend.title = element_text(size = 11),
@@ -294,13 +308,6 @@ analyze_sample <- function(sample_name) {
 }
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) > 0) {
-  target_sample <- args[1]
-  if (!target_sample %in% samples) {
-    stop(sprintf("Sample '%s' not found in data/. Available samples: %s", target_sample, paste(samples, collapse = ", ")))
-  }
-} else {
-  target_sample <- samples[1]
-}
+target_sample <- resolve_target_sample(args)
 
 analyze_sample(target_sample)

@@ -95,11 +95,15 @@ Do this instead, no new dependencies:
 - Moran's I via sparse matrix ops, with a permutation p. Run on `entropy_rarefied`, `nCount`, `nFeature`, `percent.mt`, `Stemness_Score1`. This is the evidence that motivates the whole correction and is a Methods figure in its own right.
 - Spatial block permutation for the bivariate entropy-vs-stemness question: permute in contiguous blocks so the null preserves autocorrelation.
 
-Add `spdep`/`SpatialPack` later **only if** a reviewer asks for Lee's L or a Dutilleul effective _n_ specifically, and log the dependency in D6 when you do.
+Add `spdep`/`SpatialPack` later **only if** a reviewer asks for Lee's L or a Dutilleul effective _n_ specifically, and log the dependency in D7 when you do.
+
+**Numbering.** D6 was taken by cohort sample inclusion/exclusion (finalized). Spatial inference is **D7**.
 
 Framing for the write-up: Pearson/Spearman are fine as _effect sizes_. What is broken is the significance test, because n ≈ 11,700 makes any p uninformative and the effective n is far smaller than the nominal n.
 
-**Keep in view:** the current entropy-stemness result is r = −0.0835. That is a null. No spatial statistic will make it interesting. The point of Stages 2–3 is to find out whether the corrected metric shows anything; build only as much inference machinery as the effect size turns out to justify.
+**Keep in view (updated after Stage 3).** The r = −0.0835 null this section was written against was the pre-rarefaction number. On `entropy_rarefied` the sample1 result is r = +0.1747, ρ = +0.2105, and it survives conditioning: partial r = +0.1392 given `percent.mt` + log(nCount) (20.3% attenuation), and it holds inside MT quartiles (0.091 / 0.231 / 0.182 / 0.131) rather than collapsing. So there is now an effect size worth testing properly, and the inference machinery is justified — but it is a small effect, so Moran's I plus block permutation is still the right ceiling. Re-read this after the cohort run: one sample is not the cohort.
+
+**Carry `percent.mt` as a covariate, not a check.** It is the strongest single correlate of `entropy_rarefied` in sample1 (r = +0.376, larger than the stemness signal itself), concentrated in the tails — within the middle MT quartiles it is ≈ 0.03. That is the degradation mechanism D6's rationale predicts, operating at spot level inside a sample that passes the sample-level gate. Every headline number from here should be the partial, and the spatial model needs `percent.mt` in it.
 
 ---
 

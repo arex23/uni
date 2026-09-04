@@ -197,8 +197,14 @@ partial_correlation_table <- function(data, x_col, y_col, covariate_sets, sample
         # Attenuation is a ratio, so it is only reported when the zero-order
         # estimate is far enough from zero to make the ratio meaningful; the raw
         # plug-in metric sits at r = +0.008 against stemness and would otherwise
-        # emit four-digit percentages that mean nothing.
-        Pct_Attenuation = if (!is.na(st$Estimate_zero_order) && abs(st$Estimate_zero_order) >= 0.02) {
+        # emit four-digit percentages that mean nothing. It is also undefined
+        # when conditioning flips the sign -- the raw plug-in goes from r = -0.036
+        # zero-order to +0.152 given log(nCount), which is a reversal, not an
+        # attenuation, and the ratio renders it as "523.79% attenuated".
+        Pct_Attenuation = if (!is.na(st$Estimate_zero_order) &&
+                              !is.na(st$Estimate) &&
+                              abs(st$Estimate_zero_order) >= 0.02 &&
+                              sign(st$Estimate) == sign(st$Estimate_zero_order)) {
           round(100 * (1 - st$Estimate / st$Estimate_zero_order), 2)
         } else {
           NA_real_

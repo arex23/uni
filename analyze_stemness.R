@@ -6,14 +6,12 @@ library(patchwork)
 
 source("R/entropy_correlation.R")
 source("R/quality_confound.R")
+source("R/cohort.R")
 
 # Define reference stemness markers panel
 stemness_genes <- list(c("PROM1", "SOX2", "POU5F1", "NANOG", "NES", "CD44", "MYC"))
 
-samples <- list.dirs("data", full.names = FALSE, recursive = FALSE)
-samples <- samples[grepl("sample[0-9]+$", samples)]
-sample_nums <- as.numeric(gsub(".*sample", "", samples))
-samples <- samples[order(sample_nums)]
+samples <- cohort_samples()
 
 analyze_stemness_sample <- function(sample_name) {
   cat("==========================================\n")
@@ -168,13 +166,6 @@ analyze_stemness_sample <- function(sample_name) {
 }
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) > 0) {
-  target_sample <- args[1]
-  if (!target_sample %in% samples) {
-    stop(sprintf("Sample '%s' not found in data/. Available samples: %s", target_sample, paste(samples, collapse = ", ")))
-  }
-} else {
-  target_sample <- samples[1]
-}
+target_sample <- resolve_target_sample(args)
 
 analyze_stemness_sample(target_sample)

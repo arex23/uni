@@ -24,7 +24,12 @@ Use the conda environment defined in `environment.yml`. Don't add,
 remove, or upgrade packages without logging it in `docs/DECISIONS.md`.
 
 ## Pipeline order
-`check_cohort_chemistry.R` (Stage 0) → `build_gene_universe.R` (calls `R/gene_universe.R`) → `sweep_rarefaction_depth.R` (Stage 3 depth sweep) → `analyze_entropy.R` (calls `R/spanorm_lowmem.R`, `R/gene_universe.R`, `R/shannon_entropy.R`, `R/entropy_correlation.R`) → `diagnose_entropy_scaling.R` (Stage 2/3 scaling diagnostic) → `analyze_stemness.R` (calls `R/entropy_correlation.R`, `R/quality_confound.R`) → `find_entropy_markers.R`
+`check_cohort_chemistry.R` (Stage 0) → `build_gene_universe.R` (calls `R/gene_universe.R`) → `sweep_rarefaction_depth.R` (Stage 3 depth sweep) → `analyze_entropy.R` (calls `R/spanorm_lowmem.R`, `R/gene_universe.R`, `R/shannon_entropy.R`, `R/entropy_correlation.R`, `R/cohort.R`) → `diagnose_entropy_scaling.R` (Stage 2/3 scaling diagnostic) → `analyze_stemness.R` (calls `R/entropy_correlation.R`, `R/quality_confound.R`, `R/cohort.R`) → `check_cohort_retention.R` (D6 retention gate) → `find_entropy_markers.R` (not yet written)
+
+Cohort runs go through `./run_cohort.sh`, one `Rscript` process per sample per stage — SpaNorm peaks near 12.5 GB on a 15 GB machine and an in-process loop gets OOM-killed partway through.
+
+## Cohort scope
+`R/cohort.R` holds the frozen 16-sample analysis cohort (D6). Any script producing a *biological* result takes its sample set from `cohort_samples()` and resolves its CLI argument through `resolve_target_sample()`; do not call `list.dirs("data")` directly in such a script. Only `check_cohort_chemistry.R` (which produces the exclusion criterion) and `build_gene_universe.R` (reference data, D5) run over all 22 via `all_samples()`. The exclusion list and the retention floor are frozen upfront on technical criteria and must never be revised after seeing entropy or stemness results.
 
 ## Data handling
 - `data/sampleN/raw_data/` — raw per-sample Visium output. Read-only,

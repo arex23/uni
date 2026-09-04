@@ -99,7 +99,7 @@ plugin_entropy_matrix <- function(expr_mat) {
 #' entropy is computed from, so that every spot really is standardised to D.
 #'
 #' @param counts_mat Gene x spot raw counts matrix (dgCMatrix)
-#' @param depth Target downsampling depth D (default: 3000)
+#' @param depth Target downsampling depth D (default: 2000)
 #' @param n_draws Number of downsampling draws to average over (default: 5)
 #' @param seed Random seed, set immediately before the draw loop (default: 23)
 #' @param allow_shallow Logical. If FALSE (default), spots with fewer than `depth`
@@ -110,7 +110,7 @@ plugin_entropy_matrix <- function(expr_mat) {
 #' @param verbose Logical, print progress information (default: TRUE)
 #' @return Named numeric vector of per-spot rarefied entropy in bits
 rarefied_entropy_matrix <- function(counts_mat,
-                                    depth = 3000,
+                                    depth = 2000,
                                     n_draws = 5,
                                     seed = 23,
                                     allow_shallow = FALSE,
@@ -155,7 +155,7 @@ rarefied_entropy_matrix <- function(counts_mat,
 #' the excluded gene families, rarefies to `depth` and stores the mean entropy.
 #'
 #' @param seurat_obj Seurat object containing spatial data
-#' @param depth Target downsampling depth D (default: 3000)
+#' @param depth Target downsampling depth D (default: 2000)
 #' @param n_draws Number of downsampling draws to average across (default: 5)
 #' @param seed Random seed initialized immediately prior to downsampling draws (default: 23)
 #' @param assay Assay name to extract counts from (default: NULL -> DefaultAssay)
@@ -165,7 +165,7 @@ rarefied_entropy_matrix <- function(counts_mat,
 #' @param verbose Logical, print progress information (default: TRUE)
 #' @return Seurat object with rarefied entropy added to metadata
 calculate_rarefied_entropy <- function(seurat_obj,
-                                       depth = 3000,
+                                       depth = 2000,
                                        n_draws = 5,
                                        seed = 23,
                                        assay = NULL,

@@ -53,12 +53,10 @@ total_spots <- ncol(counts_all)
 cat(sprintf("On-tissue spots: %d; candidate spots (nCount >= 500, nFeature >= 250): %d\n",
             n_spots_ontissue, total_spots))
 
-# Same feature pipeline as analyze_entropy.R: cohort gene universe, then the
-# per-sample detection threshold, then the MT/ribosomal exclusion.
+# Feature pipeline: cohort gene universe as-is (D1/D5), followed by MT/ribosomal exclusion.
+# Rarefaction standardizes depth across spots, eliminating the need for an ad-hoc per-sample
+# spot detection threshold.
 counts_all <- filter_by_gene_universe(counts_all)
-min_spots_per_gene <- max(20, ceiling(0.02 * ncol(counts_all)))
-gene_totals <- Matrix::rowSums(counts_all > 0)
-counts_all <- counts_all[gene_totals >= min_spots_per_gene, , drop = FALSE]
 counts_entropy <- exclude_gene_families(counts_all, "^(MT-|RP[SL])",
                                         context = "the depth sweep")
 cat(sprintf("Entropy matrix: %d features x %d spots.\n", nrow(counts_entropy), ncol(counts_entropy)))
@@ -121,6 +119,11 @@ for (D in candidate_depths) {
     Spearman_rho_ndetected = rho_ndet,
     Mean_Rarefied_Entropy = mean(h_vals),
     SD_Rarefied_Entropy = sd(h_vals),
+    Median_Rarefied_Entropy = median(h_vals),
+    IQR_Rarefied_Entropy = IQR(h_vals),
+    Min_Rarefied_Entropy = min(h_vals),
+    Max_Rarefied_Entropy = max(h_vals),
+    Range_Rarefied_Entropy = max(h_vals) - min(h_vals),
     stringsAsFactors = FALSE
   )
 

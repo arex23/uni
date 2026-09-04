@@ -82,11 +82,11 @@ spatial_obj <- calculate_shannon_entropy(
   exclude_pattern = "^(MT-|RP[SL])"
 )
 
-# 5. Rarefied Shannon entropy: depth D = 3000, n_draws = 5
+# 5. Rarefied Shannon entropy: depth D = 2000, n_draws = 5
 if (!"entropy_rarefied" %in% colnames(spatial_obj@meta.data)) {
   spatial_obj <- calculate_rarefied_entropy(
     spatial_obj,
-    depth = 3000,
+    depth = 2000,
     n_draws = 5,
     seed = 23,
     col.name = "entropy_rarefied",

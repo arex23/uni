@@ -10,14 +10,19 @@ suppressPackageStartupMessages({
   library(hdf5r)
 })
 
+source("R/cohort.R")
+
 cat("=================================================================\n")
 cat("Building Cohort Gene Universe across all samples\n")
 cat("=================================================================\n")
 
-samples <- list.dirs("data", full.names = FALSE, recursive = FALSE)
-samples <- samples[grepl("sample[0-9]+$", samples)]
-sample_nums <- as.numeric(gsub(".*sample", "", samples))
-samples <- samples[order(sample_nums)]
+# Deliberately all 22 samples, not cohort_samples(). The universe is a permissive
+# union over the full slide set (D5): the probe panel is identical across samples
+# by construction, so including the 6 D6-excluded samples only adds features that
+# are rare everywhere and contribute negligibly to entropy. Keeping the union at
+# 22 also means the D6 exclusion does not silently redefine the feature space the
+# sample1 numbers in D1/D2 were recorded on.
+samples <- all_samples()
 
 cat(sprintf("Found %d samples in data/\n", length(samples)))
 
