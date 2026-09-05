@@ -2,22 +2,17 @@
 # Per-spot Shannon entropy computation for spatial transcriptomics.
 #
 # Provides:
-# 1. rarefied_entropy_matrix() / calculate_rarefied_entropy() — Primary estimator:
-#    downsamples the raw counts matrix to a uniform target depth D across n_draws
-#    iterations, averaging entropy across draws. Solves the depth-driven support
-#    ceiling.
-# 2. plugin_entropy_matrix() / calculate_shannon_entropy() — Full-depth plug-in
-#    estimator on a specified layer (counts or data), used as the baseline that
-#    demonstrates the depth bias.
+# 1. exclude_gene_families() — drops the MT/ribosomal rows before estimation.
+# 2. plugin_entropy_matrix() / calculate_shannon_entropy() — plug-in estimator
+#    H_j = -sum_i p_ij log2(p_ij) with p_ij = y_ij / sum_i y_ij, evaluated on a
+#    specified layer (raw `counts` or the SpaNorm-normalized `data`), in
+#    column-blocked sparse form to bound peak memory.
 #
-# The matrix-level functions are the implementation; the calculate_*() functions
-# are thin Seurat wrappers around them. `sweep_rarefaction_depth.R` uses the
-# matrix-level entry points so the depth sweep can run on raw counts, before any
-# D-dependent spot filtering has been applied.
+# plugin_entropy_matrix() is the implementation; calculate_shannon_entropy() is a
+# thin Seurat wrapper around it that pulls a layer and writes a metadata column.
 
 suppressPackageStartupMessages({
   library(Matrix)
-  library(scuttle)
 })
 
 #' Drop excluded gene families from an expression matrix
@@ -89,110 +84,6 @@ plugin_entropy_matrix <- function(expr_mat) {
 
   names(full_entropy) <- colnames(expr_mat)
   full_entropy
-}
-
-#' Per-spot rarefied Shannon entropy of a counts matrix
-#'
-#' Every spot is downsampled to exactly `depth` counts, `n_draws` times, and the
-#' entropies are averaged. The matrix passed in must already have had any excluded
-#' gene families removed: the rarefaction depth is defined on the same matrix the
-#' entropy is computed from, so that every spot really is standardised to D.
-#'
-#' @param counts_mat Gene x spot raw counts matrix (dgCMatrix)
-#' @param depth Target downsampling depth D (default: 2000)
-#' @param n_draws Number of downsampling draws to average over (default: 5)
-#' @param seed Random seed, set immediately before the draw loop (default: 23)
-#' @param allow_shallow Logical. If FALSE (default), spots with fewer than `depth`
-#'   counts are an error: `scuttle::downsampleMatrix` would cap their sampling
-#'   proportion at 1.0 and leave them at full depth, silently reintroducing exactly
-#'   the depth bias rarefaction exists to remove. Set TRUE only for diagnostics that
-#'   deliberately want the capped behaviour.
-#' @param verbose Logical, print progress information (default: TRUE)
-#' @return Named numeric vector of per-spot rarefied entropy in bits
-rarefied_entropy_matrix <- function(counts_mat,
-                                    depth = 2000,
-                                    n_draws = 5,
-                                    seed = 23,
-                                    allow_shallow = FALSE,
-                                    verbose = TRUE) {
-  col_totals <- Matrix::colSums(counts_mat)
-  n_shallow <- sum(col_totals < depth)
-  if (n_shallow > 0) {
-    msg <- sprintf(
-      paste0("%d of %d spots have post-exclusion depth < %d (min: %.0f). Rarefaction ",
-             "cannot standardise them; filter spots on the post-exclusion column sums, ",
-             "not on nCount, before calling this function."),
-      n_shallow, length(col_totals), depth, min(col_totals))
-    if (!allow_shallow) stop(msg)
-    warning(paste(msg, "Sampling proportion capped at 1.0 for these spots."))
-  }
-
-  props <- pmin(1.0, depth / col_totals)
-  ncells <- ncol(counts_mat)
-
-  if (verbose) {
-    cat(sprintf("Calculating rarefied Shannon entropy (depth = %d, n_draws = %d, seed = %d) across %d spots...\n",
-                depth, n_draws, seed, ncells))
-  }
-
-  # Initialize seed immediately prior to downsampling draws
-  set.seed(seed)
-
-  draw_entropies <- matrix(0, nrow = ncells, ncol = n_draws)
-  for (draw in seq_len(n_draws)) {
-    ds_mat <- scuttle::downsampleMatrix(counts_mat, prop = props, bycol = TRUE)
-    draw_entropies[, draw] <- plugin_entropy_matrix(ds_mat)
-  }
-
-  mean_entropy <- rowMeans(draw_entropies)
-  names(mean_entropy) <- colnames(counts_mat)
-  mean_entropy
-}
-
-#' Calculate Rarefied Shannon Entropy across Spots
-#'
-#' Seurat wrapper around rarefied_entropy_matrix(): pulls the counts layer, drops
-#' the excluded gene families, rarefies to `depth` and stores the mean entropy.
-#'
-#' @param seurat_obj Seurat object containing spatial data
-#' @param depth Target downsampling depth D (default: 2000)
-#' @param n_draws Number of downsampling draws to average across (default: 5)
-#' @param seed Random seed initialized immediately prior to downsampling draws (default: 23)
-#' @param assay Assay name to extract counts from (default: NULL -> DefaultAssay)
-#' @param col.name Metadata column name to store result (default: "entropy_rarefied")
-#' @param exclude_pattern Regex pattern of gene families to exclude (default: "^(MT-|RP[SL])")
-#' @param allow_shallow Logical, see rarefied_entropy_matrix() (default: FALSE)
-#' @param verbose Logical, print progress information (default: TRUE)
-#' @return Seurat object with rarefied entropy added to metadata
-calculate_rarefied_entropy <- function(seurat_obj,
-                                       depth = 2000,
-                                       n_draws = 5,
-                                       seed = 23,
-                                       assay = NULL,
-                                       col.name = "entropy_rarefied",
-                                       exclude_pattern = "^(MT-|RP[SL])",
-                                       allow_shallow = FALSE,
-                                       verbose = TRUE) {
-  if (is.null(assay)) assay <- Seurat::DefaultAssay(seurat_obj)
-
-  counts_mat <- Seurat::GetAssayData(seurat_obj, assay = assay, layer = "counts")
-  if (is.null(counts_mat) || nrow(counts_mat) == 0) {
-    stop(sprintf("No counts found in assay '%s', layer 'counts'.", assay))
-  }
-
-  counts_mat <- exclude_gene_families(counts_mat, exclude_pattern, verbose,
-                                      context = "rarefied entropy calculation")
-
-  mean_entropy <- rarefied_entropy_matrix(
-    counts_mat,
-    depth = depth,
-    n_draws = n_draws,
-    seed = seed,
-    allow_shallow = allow_shallow,
-    verbose = verbose
-  )
-
-  Seurat::AddMetaData(seurat_obj, metadata = mean_entropy, col.name = col.name)
 }
 
 #' Calculate Plug-in Shannon Entropy across Spots

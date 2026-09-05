@@ -113,7 +113,7 @@ analyze_stemness_sample <- function(sample_name) {
     name = "Stemness_Score"
   )
 
-  ent_cols <- intersect(c("entropy_rarefied", "entropy_raw_plugin"), colnames(spatial_obj@meta.data))
+  ent_cols <- intersect(c("entropy_raw_plugin", "entropy_spanorm_plugin"), colnames(spatial_obj@meta.data))
   if (length(ent_cols) > 0) {
     cor_res <- calculate_entropy_correlations(
       seurat_obj = spatial_obj,
@@ -125,8 +125,8 @@ analyze_stemness_sample <- function(sample_name) {
       save_outputs = TRUE
     )
 
-    # Spatial plots side-by-side (Rarefied Entropy vs Stemness Score)
-    primary_ent <- if ("entropy_rarefied" %in% ent_cols) "entropy_rarefied" else ent_cols[1]
+    # Spatial plots side-by-side (Entropy vs Stemness Score)
+    primary_ent <- if ("entropy_raw_plugin" %in% ent_cols) "entropy_raw_plugin" else ent_cols[1]
     p_spatial <- suppressMessages(
       SpatialFeaturePlot(spatial_obj, features = c(primary_ent, "Stemness_Score1")) +
         plot_layout(guides = "collect")
@@ -136,10 +136,14 @@ analyze_stemness_sample <- function(sample_name) {
            plot = p_spatial, width = 12, height = 5, dpi = 300)
     cat("Spatial comparison plot saved to", out_dir, "\n")
 
-    # Quality confound gate (D3): the rarefied metric correlates with percent.mt
-    # more strongly than with stemness, and low-depth spots are high-MT, so the
-    # entropy-stemness association has to be shown to survive adjustment for spot
-    # quality before it is treated as biology.
+    # Quality confound gate (D3). Spot quality is a live alternative explanation
+    # for any entropy-stemness association: a degraded, high-MT spot has flatter,
+    # more ambient-like non-MT signal, and low-depth spots are the high-MT ones
+    # (cohort rho = -0.41 between depth and MT, Stage 0). The association has to be
+    # shown to survive adjustment for percent.mt and log(nCount) before it is
+    # treated as biology. The sample1 numbers recorded in D3 were measured on the
+    # abandoned rarefied metric and have to be re-run on whatever metric replaces
+    # it; the check itself is metric-agnostic and runs on every entropy column.
     run_quality_confound_check(
       seurat_obj = spatial_obj,
       entropy_cols = ent_cols,

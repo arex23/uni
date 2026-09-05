@@ -1,11 +1,11 @@
 #!/usr/bin/env Rscript
 # Cohort retention gate (D6), run after run_cohort.sh.
 #
-# The D = 2000 depth gates drop the shallow tail of each sample, and that tail is
-# not the same size everywhere: the sweep measured 99.6% retention on sample1 but
-# 81.5% on sample4 and 68.1% on sample21. Dropped spots are spatially clustered,
-# so each sample enters Stage 4 with a differently-holed hex lattice, and a sample
-# that lost a third of its tissue is not comparable to one that lost none.
+# The spot QC gates drop each sample's shallow tail, and that tail is not the same
+# size everywhere. Dropped spots are spatially clustered rather than scattered, so
+# each sample enters downstream spatial inference with a differently-holed hex
+# lattice, and a sample that lost a third of its tissue is not comparable to one
+# that lost none.
 #
 # The threshold (COHORT_MIN_RETENTION_PCT in R/cohort.R) is frozen before the
 # cohort run for the same reason the %MT threshold is: a retention floor chosen
@@ -36,12 +36,11 @@ for (s in cohort) {
     Sample = s,
     Spots_On_Tissue = qc$Spots_On_Tissue[1],
     Spots_Post_Depth_QC = qc$Spots_Post_Depth_QC[1],
-    Spots_Dropped_Entropy_Depth = qc$Spots_Dropped_Entropy_Depth[1],
     Spots_Final = qc$Spots_Final[1],
     Pct_OnTissue_Retained = qc$Pct_OnTissue_Retained[1],
     Mean_Percent_MT = qc$Mean_Percent_MT[1],
-    Mean_Rarefied_Entropy = qc$Mean_Rarefied_Entropy[1],
-    SD_Rarefied_Entropy = qc$SD_Rarefied_Entropy[1],
+    Mean_Raw_Plugin_Entropy = qc$Mean_Raw_Plugin_Entropy[1],
+    SD_Raw_Plugin_Entropy = qc$SD_Raw_Plugin_Entropy[1],
     stringsAsFactors = FALSE
   )
 }
@@ -80,14 +79,15 @@ if (length(failing) > 0) {
               nrow(df), length(missing), length(cohort)))
   cat("The gate is not satisfied until the whole cohort has run.\n")
 } else {
-  cat(sprintf("All %d cohort samples pass. Comparable at D = 2000; Stage 4 can proceed.\n", nrow(df)))
+  cat(sprintf("All %d cohort samples pass. Comparable spot coverage; Stage 4 can proceed.\n", nrow(df)))
 }
 
-# Cross-sample spread of the primary metric: mean entropy is measured at fixed D,
-# so a large spread across samples is a batch effect to model in Stage 4, not a
-# reason to re-gate anything here.
-cat(sprintf("\nMean rarefied entropy across cohort: %.4f - %.4f (spread %.4f bits)\n",
-            min(df$Mean_Rarefied_Entropy, na.rm = TRUE),
-            max(df$Mean_Rarefied_Entropy, na.rm = TRUE),
-            diff(range(df$Mean_Rarefied_Entropy, na.rm = TRUE))))
+# Cross-sample spread of the entropy baseline. A large spread across samples is a
+# batch effect to model in Stage 4, not a reason to re-gate anything here. Note
+# that the plug-in metric is depth-coupled by construction, so part of this spread
+# just tracks the samples' differing sequencing depths.
+cat(sprintf("\nMean plug-in entropy across cohort: %.4f - %.4f (spread %.4f bits)\n",
+            min(df$Mean_Raw_Plugin_Entropy, na.rm = TRUE),
+            max(df$Mean_Raw_Plugin_Entropy, na.rm = TRUE),
+            diff(range(df$Mean_Raw_Plugin_Entropy, na.rm = TRUE))))
 cat(sprintf("Written: %s\n", out_file))

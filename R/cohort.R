@@ -27,10 +27,17 @@ COHORT_EXCLUDED <- c(
 # Frozen quality threshold behind COHORT_EXCLUDED, in percent.
 COHORT_MT_THRESHOLD <- 10
 
-# Minimum percentage of on-tissue spots a sample must retain through the
-# D = 2000 depth gates to stay in the cohort. Frozen before the cohort run so
-# the decision cannot be made after seeing correlations. Applied by
+# Minimum percentage of on-tissue spots a sample must retain through the QC
+# gates to stay in the cohort. Frozen before the cohort run so the decision
+# cannot be made after seeing correlations. Applied by
 # `check_cohort_retention.R` against the per-sample QC tables.
+#
+# Under the nCount >= 500 / nFeature >= 250 floors this is a guard rather than a
+# live discriminator: every cohort sample is expected to retain close to 100% of
+# its on-tissue spots. It earns its keep if a future estimator reintroduces a
+# depth-dependent gate, or if a sample turns out to be far shallower than Stage 0
+# predicted -- a sample that has lost a third of its tissue area is not comparable
+# to one that lost none.
 COHORT_MIN_RETENTION_PCT <- 60
 
 #' All samples present in data/, numerically ordered

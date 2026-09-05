@@ -59,6 +59,8 @@ Run one diagnostic on sample1: take the existing `logcounts` layer, back-transfo
 
 ## Stage 3 — Rarefied entropy (~1 day, conditional on Stage 2)
 
+> **Superseded (2026-09-04).** This stage was implemented in full and then reverted: rarefaction is not the route this project follows. See D2 for why, and `rarefaction_entropy.R` for the code, which is kept standalone and out of the pipeline. The rest of this section is retained as the record of what was proposed. The parts that survived the reversal are the gene universe (D5) and the `entropy_raw_plugin` baseline; the parts that did not are the $D$ sweep, the `nCount \ge D` spot threshold and the `entropy_rarefied` column.
+
 Assuming Stage 2 shows a substantial residual depth correlation after back-transformation:
 
 `build_gene_universe.R` + `R/gene_universe.R` per Stage 0, simplified.
@@ -101,9 +103,9 @@ Add `spdep`/`SpatialPack` later **only if** a reviewer asks for Lee's L or a Dut
 
 Framing for the write-up: Pearson/Spearman are fine as _effect sizes_. What is broken is the significance test, because n ≈ 11,700 makes any p uninformative and the effective n is far smaller than the nominal n.
 
-**Keep in view (updated after Stage 3).** The r = −0.0835 null this section was written against was the pre-rarefaction number. On `entropy_rarefied` the sample1 result is r = +0.1747, ρ = +0.2105, and it survives conditioning: partial r = +0.1392 given `percent.mt` + log(nCount) (20.3% attenuation), and it holds inside MT quartiles (0.091 / 0.231 / 0.182 / 0.131) rather than collapsing. So there is now an effect size worth testing properly, and the inference machinery is justified — but it is a small effect, so Moran's I plus block permutation is still the right ceiling. Re-read this after the cohort run: one sample is not the cohort.
+**Keep in view.** The effect sizes this section was originally written against were measured on the rarefied metric and no longer exist (D2). Whether there is an entropy–stemness effect worth testing properly is an open question again, to be re-answered on whatever estimator replaces the current baselines. The machinery here — Moran's I, block permutation — is still the right ceiling for a small effect and is independent of the metric, so it can be built against whatever column exists.
 
-**Carry `percent.mt` as a covariate, not a check.** It is the strongest single correlate of `entropy_rarefied` in sample1 (r = +0.376, larger than the stemness signal itself), concentrated in the tails — within the middle MT quartiles it is ≈ 0.03. That is the degradation mechanism D6's rationale predicts, operating at spot level inside a sample that passes the sample-level gate. Every headline number from here should be the partial, and the spatial model needs `percent.mt` in it.
+**Carry `percent.mt` as a covariate, not a check.** This survives the reversal on its own merits. Degradation operates at spot level inside samples that pass the sample-level D6 gate, and a degraded spot's flatter non-MT profile inflates any diversity estimator. Every headline number from here should be the partial, and the spatial model needs `percent.mt` in it.
 
 ---
 
