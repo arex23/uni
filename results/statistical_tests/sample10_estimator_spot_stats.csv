@@ -1,0 +1,2 @@
+"Sample","N","Median_N","Median_K","Median_f1","Median_f2","Median_Singleton_Fraction","Median_Coverage_GT","Min_Coverage_GT","N_Spots_f1_eq_N","Spearman_SingletonFrac_vs_nCount"
+"sample10",11207,24980,7473,2941,1661,0.122115856651939,0.877884143348061,0.101321585903084,0,-0.997465205391707

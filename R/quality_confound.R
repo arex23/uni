@@ -21,13 +21,11 @@
 #    clean spots (percent.mt < threshold) and, as the mirror image, to the high-MT
 #    spots. If the association survives in the clean subset it is not degradation.
 #
-# Requires pair_correlation_stats() from R/entropy_correlation.R.
+# Requires pair_correlation_stats() and entropy_col_label() from R/entropy_correlation.R.
 
 #' Label a metadata column for reporting
 confound_var_label <- function(col) {
   labels <- c(
-    entropy_raw_plugin = "Shannon Entropy (Raw Plug-in)",
-    entropy_spanorm_plugin = "Shannon Entropy (SpaNorm Plug-in)",
     Stemness_Score1 = "Stemness Score",
     percent.mt = "Percent_MT",
     percent.ribo = "Percent_Ribo",
@@ -35,7 +33,13 @@ confound_var_label <- function(col) {
     nFeature_Spatial = "nFeatures",
     log_nCount_Spatial = "log(nCounts)"
   )
-  if (col %in% names(labels)) unname(labels[[col]]) else col
+  if (col %in% names(labels)) return(unname(labels[[col]]))
+  # Entropy columns are labelled from ENTROPY_COL_LABELS in
+  # R/entropy_correlation.R rather than from a second copy here. This function
+  # used to carry its own entropy entries and they went stale the moment a new
+  # estimator was added: `entropy_chao_shen` came through the confound tables
+  # unlabelled while every other table named it properly.
+  entropy_col_label(col)
 }
 
 #' Zero-order correlations for a list of variable pairs

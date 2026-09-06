@@ -92,8 +92,43 @@ pair_correlation_stats <- function(x, y) {
 }
 
 
+#' Default entropy column for the correlation tables
+#'
+#' The previous default was `"shannon_entropy"`, a column name D2 states is
+#' never written — it denoted the SpaNorm log-scale metric that D2 characterises
+#' as defective, and reusing it would silently relabel that metric. Every caller
+#' passes `entropy_cols` explicitly, so the old default was inert, but it was a
+#' trap for the next one. The default is now the primary pipeline column.
+#' It moves to whichever estimator Stage A5 selects (Stage C).
+# Chao-Shen is the primary metric as of Stage A5 (D2); the plug-in baseline is
+# co-reported so every table carries the comparison between the two correction
+# routes rather than a single unchecked number.
+ENTROPY_COL_DEFAULT <- c("entropy_chao_shen", "entropy_raw_plugin")
+
+#' Human-readable axis / table label for an entropy metadata column
+#'
+#' Single lookup rather than a branch chain so that the Stage A estimators and
+#' the pipeline baselines are labelled from one place; an unmapped column falls
+#' back to its own name rather than being silently mislabelled.
+ENTROPY_COL_LABELS <- c(
+  entropy_raw_plugin      = "Shannon Entropy (Raw Plug-in)",
+  entropy_spanorm_plugin  = "Shannon Entropy (SpaNorm Plug-in)",
+  entropy_plugin          = "Shannon Entropy (Plug-in)",
+  entropy_chao_shen       = "Entropy (Chao-Shen)",
+  entropy_chao_shen_cwj   = "Entropy (Chao-Shen, CWJ coverage)",
+  entropy_miller_madow    = "Entropy (Miller-Madow)",
+  shannon_entropy_raw     = "Shannon Entropy (Raw)",
+  shannon_entropy_log     = "Shannon Entropy (SpaNorm Log-Scale)",
+  shannon_entropy_linear  = "Shannon Entropy (SpaNorm Linear)"
+)
+
+entropy_col_label <- function(e_col) {
+  if (e_col %in% names(ENTROPY_COL_LABELS)) unname(ENTROPY_COL_LABELS[e_col]) else e_col
+}
+
+
 calculate_entropy_correlations <- function(seurat_obj,
-                                            entropy_cols = "shannon_entropy",
+                                            entropy_cols = ENTROPY_COL_DEFAULT,
                                             targets = NULL,
                                             count_col = NULL,
                                             feature_col = NULL,
@@ -124,21 +159,7 @@ calculate_entropy_correlations <- function(seurat_obj,
   plot_list <- list()
 
   for (e_col in entropy_cols) {
-    e_label <- if (e_col == "entropy_raw_plugin") {
-      "Shannon Entropy (Raw Plug-in)"
-    } else if (e_col == "entropy_spanorm_plugin") {
-      "Shannon Entropy (SpaNorm Plug-in)"
-    } else if (e_col == "shannon_entropy") {
-      "Shannon Entropy (Normalized)"
-    } else if (e_col == "shannon_entropy_raw") {
-      "Shannon Entropy (Raw)"
-    } else if (e_col == "shannon_entropy_log") {
-      "Shannon Entropy (SpaNorm Log-Scale)"
-    } else if (e_col == "shannon_entropy_linear") {
-      "Shannon Entropy (SpaNorm Linear)"
-    } else {
-      e_col
-    }
+    e_label <- entropy_col_label(e_col)
 
     for (t_name in names(targets)) {
       t_col <- targets[[t_name]]

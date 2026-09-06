@@ -113,7 +113,10 @@ analyze_stemness_sample <- function(sample_name) {
     name = "Stemness_Score"
   )
 
-  ent_cols <- intersect(c("entropy_raw_plugin", "entropy_spanorm_plugin"), colnames(spatial_obj@meta.data))
+  # Order matters: run_quality_confound_check() takes entropy_cols[1] as the
+  # primary for its figure and summary, and Chao-Shen is the primary metric (D2).
+  ent_cols <- intersect(c("entropy_chao_shen", "entropy_raw_plugin", "entropy_spanorm_plugin"),
+                        colnames(spatial_obj@meta.data))
   if (length(ent_cols) > 0) {
     cor_res <- calculate_entropy_correlations(
       seurat_obj = spatial_obj,
@@ -126,7 +129,7 @@ analyze_stemness_sample <- function(sample_name) {
     )
 
     # Spatial plots side-by-side (Entropy vs Stemness Score)
-    primary_ent <- if ("entropy_raw_plugin" %in% ent_cols) "entropy_raw_plugin" else ent_cols[1]
+    primary_ent <- ent_cols[1]
     p_spatial <- suppressMessages(
       SpatialFeaturePlot(spatial_obj, features = c(primary_ent, "Stemness_Score1")) +
         plot_layout(guides = "collect")

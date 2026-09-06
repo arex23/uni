@@ -1,0 +1,7 @@
+"Sample","Metric","Prop","Split_Half_Rho","Split_Half_Rho_Given_Depth"
+"sample18","DEPTH (nCount itself)",0.5,0.999944373919391,0.0204674381991146
+"sample18","NOISE (independent normals)",0.5,-0.00517281392802762,-0.00505402709542463
+"sample18","plugin",0.5,0.997040781632074,0.990591546576476
+"sample18","chao_shen",0.5,0.978612807377444,0.976415246766133
+"sample18","chao_shen_cwj",0.5,0.978620898411302,0.976428876226906
+"sample18","miller_madow",0.5,0.994467878536731,0.989926256064747

@@ -11,6 +11,7 @@ source("R/entropy_correlation.R")
 source("R/spanorm_lowmem.R")
 source("R/gene_universe.R")
 source("R/cohort.R")
+source("R/load_sample.R")
 
 # Replace SpaNorm's logpac adjustment with the gene-blocked kernel. The public
 # SpaNorm::SpaNorm() call below is unchanged and the output is bit-identical;
@@ -83,115 +84,46 @@ setMethod("SpaNorm", signature(spe = "Seurat"), function(spe,
 
 samples <- cohort_samples()
 
-validate_imaged_coordinates <- function(seurat_obj) {
-  counts_mat <- Seurat::GetAssayData(seurat_obj, assay = "Spatial", layer = "counts")
-  coords_df <- Seurat::GetTissueCoordinates(seurat_obj)
-  coords_mat <- as.matrix(coords_df[, 1:2])
-
-  common_spots <- intersect(colnames(counts_mat), rownames(coords_mat))
-  if (length(common_spots) > 0 && length(common_spots) < ncol(seurat_obj)) {
-    cat(sprintf("Subsetting from %d to %d spots with valid imaged coordinates.\n",
-                ncol(seurat_obj), length(common_spots)))
-    seurat_obj <- subset(seurat_obj, cells = common_spots)
-  }
-  return(seurat_obj)
-}
-
 analyze_sample <- function(sample_name) {
   cat("==========================================\n")
   cat("Processing sample:", sample_name, "\n")
 
-  sample_dir <- file.path("data", sample_name)
-  if (!dir.exists(sample_dir)) {
-    stop(sprintf("Directory '%s' does not exist for sample '%s'", sample_dir, sample_name))
-  }
-
-  h5_files <- list.files(path = sample_dir, pattern = "\\.h5$", recursive = TRUE, full.names = TRUE)
-  if (length(h5_files) == 0) {
-    stop(sprintf("No .h5 file found in %s for sample '%s'", sample_dir, sample_name))
-  }
-  h5_path <- h5_files[1]
-
-  tp_files <- list.files(path = sample_dir, pattern = "tissue_positions.*\\.csv$", recursive = TRUE, full.names = TRUE)
-  if (length(tp_files) == 0) {
-    stop(sprintf("No tissue_positions.csv found in %s for sample '%s'", sample_dir, sample_name))
-  }
-  tp_file <- tp_files[1]
-
-  spatial_dir <- dirname(dirname(tp_file))
-  h5_rel <- if (dirname(h5_path) == spatial_dir) basename(h5_path) else file.path("..", basename(h5_path))
-
-  spatial_obj <- Load10X_Spatial(
-    data.dir = spatial_dir,
-    filename = h5_rel,
-    assay = "Spatial",
-    filter.matrix = TRUE
-  )
-
-  raw_spots_grid <- ncol(spatial_obj)
-  n_raw_genes <- nrow(spatial_obj)
-
-  # Load tissue positions and explicitly subset to in_tissue == 1 spots
-  tp_df <- read.csv(tp_file)
-  if ("in_tissue" %in% colnames(tp_df)) {
-    ontissue_barcodes <- tp_df$barcode[tp_df$in_tissue == 1]
-    bc_col <- "barcode"
-    row_col <- "array_row"
-    col_col <- "array_col"
-  } else {
-    ontissue_barcodes <- tp_df[[1]][tp_df[[2]] == 1]
-    bc_col <- colnames(tp_df)[1]
-    row_col <- colnames(tp_df)[3]
-    col_col <- colnames(tp_df)[4]
-  }
-
-  spatial_obj <- subset(spatial_obj, cells = intersect(colnames(spatial_obj), ontissue_barcodes))
-  n_spots_ontissue <- ncol(spatial_obj)
-
-  # Add Visium hexagonal array lattice coordinates to metadata for spatial modeling (Stage 4)
-  matched_idx <- match(colnames(spatial_obj), tp_df[[bc_col]])
-  spatial_obj$array_row <- tp_df[[row_col]][matched_idx]
-  spatial_obj$array_col <- tp_df[[col_col]][matched_idx]
-
-  # Calculate mitochondrial and ribosomal percentages on-tissue
-  spatial_obj[["percent.mt"]] <- PercentageFeatureSet(spatial_obj, pattern = "^MT-")
-  spatial_obj[["percent.ribo"]] <- PercentageFeatureSet(spatial_obj, pattern = "^RP[SL]")
-
-  # 1. Spot filtering by sequencing depth (nCount >= 500) and feature count
-  # (nFeature >= 250) on on-tissue spots. Both are plain quality floors: they
-  # remove barcodes too sparse to carry a usable expression profile at all, and
-  # are not tied to any downstream estimator's target depth.
-  min_counts <- 500
-  min_features <- 250
+  # D1 load + spot/feature QC (steps 1-3), in R/load_sample.R so that the
+  # Stage A diagnostics can reach the identical spot set without running SpaNorm.
   entropy_exclude_pattern <- "^(MT-|RP[SL])"
-  valid_spots <- colnames(spatial_obj)[spatial_obj$nCount_Spatial >= min_counts & spatial_obj$nFeature_Spatial >= min_features]
-  spatial_obj <- subset(spatial_obj, cells = valid_spots)
-  n_spots_post_depth_qc <- ncol(spatial_obj)
+  loaded <- load_qc_sample(sample_name, min_counts = 500, min_features = 250)
+  spatial_obj <- loaded$obj
 
-  # 2. Validate/align spots with imaged tissue coordinates.
-  spatial_obj <- validate_imaged_coordinates(spatial_obj)
-  n_spots_post_coord <- ncol(spatial_obj)
-
-  # 3. Gene universe filtering (frozen cohort gene universe, D1/D5).
-  # The per-sample spot detection threshold is dropped so that every sample is
-  # processed on the exact same feature space, which is what makes the cohort
-  # comparable; rare genes contribute minimally to entropy either way.
-  spatial_obj <- filter_by_gene_universe(spatial_obj)
-  n_genes_in_universe <- nrow(spatial_obj)
-  n_spots_final <- ncol(spatial_obj)
-
-  raw_counts <- Seurat::GetAssayData(spatial_obj, assay = "Spatial", layer = "counts")
-  gene_totals <- Matrix::rowSums(raw_counts > 0)
-  n_genes_detected <- sum(gene_totals > 0)
-  rm(raw_counts, valid_spots, gene_totals)
+  raw_spots_grid <- loaded$qc$raw_spots_grid
+  n_raw_genes <- loaded$qc$n_raw_genes
+  n_spots_ontissue <- loaded$qc$n_spots_ontissue
+  n_spots_post_depth_qc <- loaded$qc$n_spots_post_depth_qc
+  n_spots_post_coord <- loaded$qc$n_spots_post_coord
+  n_spots_final <- loaded$qc$n_spots_final
+  n_genes_in_universe <- loaded$qc$n_genes_in_universe
+  n_genes_detected <- loaded$qc$n_genes_detected
+  rm(loaded)
   gc()
 
-  # 4. Baseline full-depth plug-in Shannon entropy on raw counts.
-  spatial_obj <- calculate_shannon_entropy(
+  # 4. Entropy on raw counts: the Chao-Shen primary metric and the plug-in
+  # baseline it replaces, in ONE blocked pass (D2, Stage A5).
+  #
+  # `plugin` is numerically identical to the calculate_shannon_entropy() call
+  # this replaced -- A2 verified the kernel against CRAN `entropy` to 1.26e-12
+  # across 22 fixtures -- so `entropy_raw_plugin` keeps its name, its values and
+  # every downstream consumer.
+  #
+  # Both are carried deliberately. Chao-Shen removes most of the depth artefact
+  # and amplifies a percent.mt one (D2); keeping the baseline alongside makes
+  # every downstream table a comparison of the two correction routes rather than
+  # a single unchecked number, and is what the pre-registered criterion 5(b)
+  # gate at Stage C needs to adjudicate them.
+  spatial_obj <- calculate_entropy(
     spatial_obj,
+    estimator = c("plugin", "chao_shen"),
+    col.name = c("entropy_raw_plugin", "entropy_chao_shen"),
     assay = "Spatial",
     layer = "counts",
-    col.name = "entropy_raw_plugin",
     exclude_pattern = entropy_exclude_pattern
   )
 
@@ -256,29 +188,47 @@ analyze_sample <- function(sample_name) {
     Min_Raw_Plugin_Entropy = round(min(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
     Max_Raw_Plugin_Entropy = round(max(spatial_obj$entropy_raw_plugin, na.rm = TRUE), 4),
     Range_Raw_Plugin_Entropy = round(diff(range(spatial_obj$entropy_raw_plugin, na.rm = TRUE)), 4),
+    Mean_Chao_Shen_Entropy = round(mean(spatial_obj$entropy_chao_shen, na.rm = TRUE), 4),
+    SD_Chao_Shen_Entropy = round(sd(spatial_obj$entropy_chao_shen, na.rm = TRUE), 4),
+    Median_Chao_Shen_Entropy = round(median(spatial_obj$entropy_chao_shen, na.rm = TRUE), 4),
+    IQR_Chao_Shen_Entropy = round(IQR(spatial_obj$entropy_chao_shen, na.rm = TRUE), 4),
+    Min_Chao_Shen_Entropy = round(min(spatial_obj$entropy_chao_shen, na.rm = TRUE), 4),
+    Max_Chao_Shen_Entropy = round(max(spatial_obj$entropy_chao_shen, na.rm = TRUE), 4),
+    Range_Chao_Shen_Entropy = round(diff(range(spatial_obj$entropy_chao_shen, na.rm = TRUE)), 4),
     stringsAsFactors = FALSE
   )
   write.csv(qc_df, file.path(entropy_dir, paste0(sample_name, "_qc_metrics.csv")), row.names = FALSE)
   cat(sprintf("Logged QC metrics to %s\n", file.path(entropy_dir, paste0(sample_name, "_qc_metrics.csv"))))
 
   # Spatial entropy visualization plot
-  p_raw <- suppressMessages(
-    SpatialFeaturePlot(spatial_obj, features = "entropy_raw_plugin") +
-      scale_fill_viridis_c(option = "magma", name = "Shannon\nEntropy\n(plug-in)")
-  ) +
-    ggtitle(paste("Spatial Distribution of Plug-in Shannon Entropy -", sample_name)) +
-    theme(
-      plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
-      legend.title = element_text(size = 11),
-      legend.text = element_text(size = 10)
+  entropy_panel <- function(col, label) {
+    suppressMessages(
+      SpatialFeaturePlot(spatial_obj, features = col) +
+        scale_fill_viridis_c(option = "magma", name = paste0("Entropy\n(", label, ")"))
+    ) +
+      ggtitle(label) +
+      theme(
+        plot.title = element_text(hjust = 0.5, size = 13, face = "bold"),
+        legend.title = element_text(size = 10),
+        legend.text = element_text(size = 9)
+      )
+  }
+
+  p_raw <- (entropy_panel("entropy_chao_shen", "Chao-Shen") |
+              entropy_panel("entropy_raw_plugin", "Plug-in")) +
+    plot_annotation(
+      title = paste("Spatial Shannon Entropy -", sample_name),
+      subtitle = "Chao-Shen is the primary metric (D2); the plug-in baseline is carried for comparison",
+      theme = theme(plot.title = element_text(hjust = 0.5, size = 15, face = "bold"),
+                    plot.subtitle = element_text(hjust = 0.5, size = 10))
     )
 
-  ggsave(file.path(entropy_dir, paste0(sample_name, "_spatial_entropy_plot.png")), plot = p_raw, width = 8, height = 7, dpi = 300)
+  ggsave(file.path(entropy_dir, paste0(sample_name, "_spatial_entropy_plot.png")), plot = p_raw, width = 14, height = 7, dpi = 300)
 
   # Normalization QC & Covariate checks: evaluate both plug-in baselines
   corr_res <- calculate_entropy_correlations(
     seurat_obj = spatial_obj,
-    entropy_cols = c("entropy_raw_plugin", "entropy_spanorm_plugin"),
+    entropy_cols = c("entropy_chao_shen", "entropy_raw_plugin", "entropy_spanorm_plugin"),
     sample_name = sample_name,
     output_dir = stat_dir
   )

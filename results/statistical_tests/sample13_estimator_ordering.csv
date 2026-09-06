@@ -1,0 +1,5 @@
+"Sample","Comparison","Invariant","N_Violations","N_Spots"
+"sample13","plugin <= miller_madow",TRUE,0,7178
+"sample13","plugin <= chao_shen",TRUE,0,7178
+"sample13","plugin <= chao_shen_cwj",TRUE,0,7178
+"sample13","miller_madow <= chao_shen",FALSE,0,7178
