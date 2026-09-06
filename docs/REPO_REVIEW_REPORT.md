@@ -13,56 +13,13 @@ This report provides an objective, rigorous review of the repository's current s
 
 ### Overall Assessment
 1. **Mathematical & Statistical Rigor:** The core implementations of the entropy estimators, reference validations, subsampling stability ladder, and hex-lattice spatial autocorrelation machinery are **exceptionally sound**. There are no hallucinations in the mathematical derivations (Chao–Shen Horvitz–Thompson inclusion probability, Chao–Wang–Jost coverage, Miller–Madow bits conversion, Moran's $I$ degree adjustment). Unit tests pass 100% (82/82 checks across two standalone suites).
-2. **Critical Git Tracking Discrepancy:** The last two git commits (`e018f2d` and `4b58e5d`) committed **only markdown documentation** ([DECISIONS.md](file:///home/alexej/Projects/Tirocinio/docs/DECISIONS.md) and [ESTIMATOR_PIVOT_PLAN.md](file:///home/alexej/Projects/Tirocinio/docs/ESTIMATOR_PIVOT_PLAN.md)). **None of the R implementation files, test scripts, diagnostic tools, or sweep drivers were committed.** The entire codebase implementation currently resides uncommitted in the working tree (as untracked files or unstaged modifications). If cloned from remote, the repository is missing all newly developed code.
-3. **Progress Milestone:** The project has completed **all of Stage A (A0 through A5b)** and **Stage B1**. Stages **B2, B3, and B4** (evaluating whether SpaNorm earns its memory/time overhead vs. plain log-normalization) have **not been executed**.
-4. **Premature Execution / Sequencing Fault:** The developer prematurely jumped into **Stage C** by modifying [analyze_entropy.R](file:///home/alexej/Projects/Tirocinio/analyze_entropy.R) and [analyze_stemness.R](file:///home/alexej/Projects/Tirocinio/analyze_stemness.R) and running `sample1` through SpaNorm before resolving Stage B. If Stage B decides to drop SpaNorm (which the plan anticipates as the most likely outcome), these modifications and the expensive SpaNorm execution on `sample1` will have to be redone.
-5. **Minor Code / Documentation Bugs:** A minor statistical implementation flaw was identified in [diagnose_correction_routes.R](file:///home/alexej/Projects/Tirocinio/diagnose_correction_routes.R) (semi-rank correlation instead of full Spearman correlation), an internal status inconsistency exists in [ESTIMATOR_PIVOT_PLAN.md](file:///home/alexej/Projects/Tirocinio/docs/ESTIMATOR_PIVOT_PLAN.md), and a factual inconsistency was found in [DECISIONS.md](file:///home/alexej/Projects/Tirocinio/docs/DECISIONS.md) regarding Criterion 4 cohort pass rates.
+2. **Progress Milestone:** The project has completed **all of Stage A (A0 through A5b)** and **Stage B1**. Stages **B2, B3, and B4** (evaluating whether SpaNorm earns its memory/time overhead vs. plain log-normalization) have **not been executed**.
+3. **Premature Execution / Sequencing Fault:** The developer prematurely jumped into **Stage C** by modifying [analyze_entropy.R](file:///home/alexej/Projects/Tirocinio/analyze_entropy.R) and [analyze_stemness.R](file:///home/alexej/Projects/Tirocinio/analyze_stemness.R) and running `sample1` through SpaNorm before resolving Stage B. If Stage B decides to drop SpaNorm (which the plan anticipates as the most likely outcome), these modifications and the expensive SpaNorm execution on `sample1` will have to be redone.
+4. **Minor Code / Documentation Bugs:** A minor statistical implementation flaw was identified in [diagnose_correction_routes.R](file:///home/alexej/Projects/Tirocinio/diagnose_correction_routes.R) (semi-rank correlation instead of full Spearman correlation), an internal status inconsistency exists in [ESTIMATOR_PIVOT_PLAN.md](file:///home/alexej/Projects/Tirocinio/docs/ESTIMATOR_PIVOT_PLAN.md), and a factual inconsistency was found in [DECISIONS.md](file:///home/alexej/Projects/Tirocinio/docs/DECISIONS.md) regarding Criterion 4 cohort pass rates.
 
 ---
 
-## 2. Git Commit Audit vs. Working Tree State
-
-### Recent Commit History
-```
-4b58e5d (HEAD -> main, origin/main) further implementation of the new plan
-e018f2d implementation of the new plan up to A4
-9fe8add Merge pull request #1 from arex23/remove-rarefaction
-```
-
-### Commit Content vs. Commit Message Reality
-- **Commit `e018f2d`** ("implementation of the new plan up to A4"):
-  - **Files changed:** [DECISIONS.md](file:///home/alexej/Projects/Tirocinio/docs/DECISIONS.md) (+117, -1), [ESTIMATOR_PIVOT_PLAN.md](file:///home/alexej/Projects/Tirocinio/docs/ESTIMATOR_PIVOT_PLAN.md) (+319, -1).
-  - **Actual code committed:** **0 lines**.
-- **Commit `4b58e5d`** ("further implementation of the new plan"):
-  - **Files changed:** [DECISIONS.md](file:///home/alexej/Projects/Tirocinio/docs/DECISIONS.md) (+152, -15), [ESTIMATOR_PIVOT_PLAN.md](file:///home/alexej/Projects/Tirocinio/docs/ESTIMATOR_PIVOT_PLAN.md) (+36, -2).
-  - **Actual code committed:** **0 lines**.
-
-### Uncommitted Working Tree Inventory
-The actual implementations are stranded in the local working tree:
-- **Untracked Core Files:**
-  - [R/load_sample.R](file:///home/alexej/Projects/Tirocinio/R/load_sample.R) (Extracts D1 load & QC to allow fast diagnostic loading without SpaNorm)
-  - [R/spatial_neighbors.R](file:///home/alexej/Projects/Tirocinio/R/spatial_neighbors.R) (Stage B1 hex-lattice graph and Moran's $I$)
-  - [R/diagnostic_sweep.R](file:///home/alexej/Projects/Tirocinio/R/diagnostic_sweep.R) (Stage A cohort sweep driver)
-  - [diagnose_subsampling_stability.R](file:///home/alexej/Projects/Tirocinio/diagnose_subsampling_stability.R) (Stage A4 subsampling ladder)
-  - [diagnose_correction_routes.R](file:///home/alexej/Projects/Tirocinio/diagnose_correction_routes.R) (Stage A5a route comparison)
-  - [test_entropy_estimators.R](file:///home/alexej/Projects/Tirocinio/tests/test_entropy_estimators.R) (Stage A2 unit tests, 49 tests)
-  - [test_spatial_neighbors.R](file:///home/alexej/Projects/Tirocinio/tests/test_spatial_neighbors.R) (Stage B1 unit tests, 33 tests)
-  - All cohort sweep output CSVs and PNGs under `results/statistical_tests/cohort_*`.
-- **Modified Tracked Files (Unstaged):**
-  - [R/shannon_entropy.R](file:///home/alexej/Projects/Tirocinio/R/shannon_entropy.R) (+355 lines: estimator kernels, CWJ coverage, Miller–Madow, `calculate_entropy()`)
-  - [R/entropy_correlation.R](file:///home/alexej/Projects/Tirocinio/R/entropy_correlation.R) (+53 lines: label mapping, default columns)
-  - [R/quality_confound.R](file:///home/alexej/Projects/Tirocinio/R/quality_confound.R) (+12 lines: label delegation)
-  - [diagnose_entropy_scaling.R](file:///home/alexej/Projects/Tirocinio/diagnose_entropy_scaling.R) (+423, -200 lines: rewritten for A3 bake-off)
-  - [AGENTS.md](file:///home/alexej/Projects/Tirocinio/AGENTS.md) (+27 lines: documentation of diagnostics)
-  - [analyze_entropy.R](file:///home/alexej/Projects/Tirocinio/analyze_entropy.R) & [analyze_stemness.R](file:///home/alexej/Projects/Tirocinio/analyze_stemness.R) (Premature Stage C edits)
-  - Various `results/` artifacts from running `sample1`.
-
-> [!WARNING]
-> **Reproducibility Risk:** Any external collaborator pulling `origin/main` receives documentation claiming the estimator pivot is complete and validated, but none of the scripts or functions will exist in their clone.
-
----
-
-## 3. Plan Progression Milestone Analysis
+## 2. Plan Progression Milestone Analysis
 
 | Stage | Plan Description | Code State | Data / Execution State | Verdict |
 | :--- | :--- | :--- | :--- | :--- |
@@ -82,7 +39,7 @@ The actual implementations are stranded in the local working tree:
 
 ---
 
-## 4. Evaluation of Hallucinations, Wrong Choices, and Discrepancies
+## 3. Evaluation of Hallucinations, Wrong Choices, and Discrepancies
 
 ### A. Code & Methodological Soundness (No Scientific Hallucinations)
 A deep code review of the mathematical modules confirmed high rigor:
@@ -168,13 +125,11 @@ Independent execution of the unit test suites confirms:
 
 ## 6. Recommendations for Next Actions
 
-1. **Commit Working Tree Code (High Priority):**
-   Stage and commit all untracked files ([R/load_sample.R](file:///home/alexej/Projects/Tirocinio/R/load_sample.R), [R/spatial_neighbors.R](file:///home/alexej/Projects/Tirocinio/R/spatial_neighbors.R), [R/diagnostic_sweep.R](file:///home/alexej/Projects/Tirocinio/R/diagnostic_sweep.R), `diagnose_*.R`, `tests/*`) to align git history with the commit logs.
-2. **Synchronize Documentation Discrepancies:**
+1. **Synchronize Documentation Discrepancies:**
    - Update [ESTIMATOR_PIVOT_PLAN.md](file:///home/alexej/Projects/Tirocinio/docs/ESTIMATOR_PIVOT_PLAN.md) line 7 to reflect that A5 is completed.
    - Update [DECISIONS.md](file:///home/alexej/Projects/Tirocinio/docs/DECISIONS.md) line 133 to state that C4 passed on 15 of 16 cohort samples (noting `sample9` at $0.0991$ vs $0.10$).
    - Update [DECISIONS.md D1](file:///home/alexej/Projects/Tirocinio/docs/DECISIONS.md#L15) to reflect the additional Chao–Shen columns in `_qc_metrics.csv`.
-3. **Fix Semi-Rank Correlation in `diagnose_correction_routes.R`:**
+2. **Fix Semi-Rank Correlation in `diagnose_correction_routes.R`:**
    Change line 194 to `cor(route_m, route_i_rank, method = "spearman")`.
-4. **Execute Stage B Before Further Cohort Work:**
+3. **Execute Stage B Before Further Cohort Work:**
    Implement B2 (Moran's $I$ on covariates) and B3 (SpaNorm vs. `NormalizeData()` comparison on stemness scores) on `sample1`, `sample4`, and `sample21` to make the Stage B4 branch decision before running any cohort-wide pipelines.
